@@ -1,0 +1,2622 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Livro de Empréstimos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F2F3F5; --card:#FFFFFF; --card-2:#EAEBEF;
+    --header-bg:#3D4554; --header-ink:#FFFFFF; --header-muted:#C3C9D3;
+    --ink:#0F172A; --muted:#64748B; --line:#D7DAE0;
+    --accent:#3D4554; --accent-2:#3D4554; --accent-soft:#E4E6EA; --accent-ink:#3D4554;
+    --danger:#E11D48; --danger-soft:#FFE4EA;
+    --warn:#B45309; --warn-soft:#FEF3C7;
+    --ok:#059669; --ok-soft:#D1FAE5;
+    --grad:#3D4554;
+    --shadow:0 1px 2px rgba(15,23,42,.06),0 4px 10px -6px rgba(15,23,42,.12);
+    --shadow-lg:0 12px 30px -10px rgba(15,23,42,.35);
+    --radius:0px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;min-height:100vh;color:var(--ink);
+    font-family:'IBM Plex Sans',system-ui,sans-serif;
+    font-size:14.5px;line-height:1.55;-webkit-font-smoothing:antialiased;
+    background:var(--bg);
+  }
+
+  /* ---------- barra de carregamento ---------- */
+  #topbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:300;overflow:hidden;opacity:0;transition:opacity .2s;pointer-events:none;}
+  #topbar.on{opacity:1;}
+  #topbar::before{content:"";position:absolute;top:0;bottom:0;left:-40%;width:40%;background:var(--grad);border-radius:0;animation:load 1.1s ease-in-out infinite;}
+  @keyframes load{0%{left:-40%}100%{left:100%}}
+
+  /* ---------- cabeçalho ---------- */
+  header{
+    position:sticky;top:0;z-index:40;
+    display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:11px clamp(16px,4vw,40px);
+    background:var(--header-bg);color:var(--header-ink);
+    border-bottom:1px solid var(--header-bg);
+  }
+  .brand{display:flex;align-items:center;gap:10px;}
+  h1{margin:0;font-size:15.5px;font-weight:800;letter-spacing:-.01em;line-height:1.2;color:var(--header-ink);}
+  header p{margin:0;color:var(--header-muted);font-size:12px;}
+  .hdr-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .conn-label{cursor:pointer;user-select:none;}
+  .status-pill{
+    display:inline-flex;align-items:center;gap:7px;padding:5px 11px;
+    border:1px solid var(--line);background:var(--card);border-radius:0;
+    font-size:11px;font-weight:600;color:var(--muted);transition:.2s;
+  }
+  .status-pill:hover{border-color:var(--accent);color:var(--ink);}
+  #status-dot{width:8px;height:8px;border-radius:50%;background:var(--danger);animation:pulseR 2s infinite;}
+  #status-dot.ok{background:var(--ok);animation:pulseG 2s infinite;}
+  @keyframes pulseG{0%{box-shadow:0 0 0 0 rgba(5,150,105,.5)}70%{box-shadow:0 0 0 8px rgba(5,150,105,0)}100%{box-shadow:0 0 0 0 rgba(5,150,105,0)}}
+  @keyframes pulseR{0%{box-shadow:0 0 0 0 rgba(225,29,72,.5)}70%{box-shadow:0 0 0 8px rgba(225,29,72,0)}100%{box-shadow:0 0 0 0 rgba(225,29,72,0)}}
+
+  .user-chip{display:inline-flex;align-items:center;gap:10px;padding:5px 8px 5px 5px;border:1px solid var(--line);background:var(--card);border-radius:0;}
+  .avatar{width:36px;height:36px;border-radius:50%;background:var(--grad);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px;flex:none;}
+  .avatar.sm{width:28px;height:28px;font-size:12px;}
+  .uc-text{display:flex;flex-direction:column;line-height:1.2;font-size:12px;max-width:190px;}
+  .uc-text #user-email{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .papel-tag{color:var(--muted);font-size:11px;text-transform:capitalize;}
+  .logout{font-size:12px;font-weight:700;color:var(--danger);padding:5px 9px;border-radius:0;transition:.2s;}
+  .logout:hover{background:var(--danger-soft);}
+
+  .icon-btn{
+    margin:0;height:30px;padding:0 12px;border-radius:0;
+    background:var(--card);border:1px solid var(--line);color:var(--ink);box-shadow:none;
+    display:grid;place-items:center;font-size:11.5px;font-weight:700;
+  }
+  .icon-btn:hover{background:var(--card-2);border-color:var(--accent);box-shadow:none;filter:none;}
+
+  /* ---------- menu lateral ---------- */
+  .app-layout{display:flex;align-items:flex-start;max-width:none;margin:0;}
+  #sidebar{
+    width:240px;flex:none;position:sticky;top:var(--hdr-h,56px);align-self:flex-start;
+    height:calc(100vh - var(--hdr-h,56px));overflow-y:auto;padding:18px 10px 32px;
+    background:var(--header-bg);color:var(--header-ink);border-right:1px solid var(--header-bg);
+    transition:width .22s ease,padding .22s ease;
+  }
+  body.sidebar-closed #sidebar{width:0;padding-left:0;padding-right:0;overflow:hidden;border-right:none;}
+  .side-group{margin-bottom:16px;}
+  .side-group:last-child{margin-bottom:0;}
+  .side-title{
+    font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--header-muted);padding:0 10px;margin-bottom:5px;white-space:nowrap;
+  }
+  .side-link{
+    display:block;width:100%;text-align:left;white-space:nowrap;
+    margin:1px 0;padding:7px 10px;font-size:12.5px;font-weight:600;
+    background:transparent;color:var(--header-ink);border:none;box-shadow:none;border-radius:0;
+    border-left:3px solid transparent;transition:.15s;
+  }
+  .side-link:hover{background:rgba(255,255,255,.1);transform:none;filter:none;box-shadow:none;}
+  .side-link.active{background:rgba(255,255,255,.18);color:#fff;border-left-color:#fff;font-weight:700;}
+  #sidebar-backdrop{display:none;}
+  @media (max-width:860px){
+    body:not(.sidebar-closed) #sidebar{position:fixed;left:0;z-index:70;box-shadow:var(--shadow-lg);}
+    body.sidebar-closed #sidebar{display:none;}
+    body:not(.sidebar-closed) #sidebar-backdrop{
+      display:block;position:fixed;left:0;right:0;bottom:0;top:var(--hdr-h,56px);z-index:65;background:rgba(8,12,24,.35);
+    }
+  }
+
+  /* ---------- botão de menu (três riscos) ---------- */
+  .icon-btn.menu-btn{
+    width:40px;height:34px;padding:0;margin:0;
+    display:inline-flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;
+    background:var(--header-bg);color:var(--header-ink);
+    border:1px solid rgba(255,255,255,.4);
+  }
+  .menu-btn .bars{display:flex;flex-direction:column;gap:4px;width:18px;}
+  .menu-btn .bars i{display:block;height:2px;width:100%;background:#fff;border-radius:1px;}
+  .icon-btn.menu-btn:hover{background:rgba(255,255,255,.14);border-color:#fff;}
+
+  /* ---------- layout ---------- */
+  main{width:100%;max-width:none;margin:0;padding:18px clamp(12px,2vw,28px) 80px;}
+  .grid2{display:grid;grid-template-columns:minmax(260px,320px) 1fr;gap:20px;align-items:start;}
+  @media (max-width:1100px){ .grid2{grid-template-columns:1fr;} }
+  @media (max-width:600px){ .row2{grid-template-columns:1fr !important;} }
+  @media (max-width:480px){
+    header{padding:12px 14px;}
+    h1{font-size:16px;} header p{display:none;}
+    main{padding:16px 12px 70px;}
+    section.panel{padding:16px;}
+    .saldo-hero{padding:20px 18px;}
+    .uc-text{max-width:110px;}
+    #login-panel{margin:24px auto !important;}
+  }
+
+
+  section.panel{
+    position:relative;background:var(--card);border:1px solid var(--line);
+    border-radius:0;padding:17px 18px;box-shadow:var(--shadow);overflow-x:auto;
+    animation:rise .45s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .panel + .panel{margin-top:14px;}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  @keyframes pop{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+
+  h2{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:13.5px;font-weight:800;letter-spacing:-.01em;}
+  h2::before{content:"";width:4px;height:14px;border-radius:0;background:var(--grad);flex:none;}
+  h2 small{font-weight:500;color:var(--muted);font-size:12px;}
+
+  label{display:block;font-size:11.5px;font-weight:600;color:var(--muted);margin:10px 0 4px;}
+  label:first-of-type{margin-top:0;}
+  input,select{
+    width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:0;
+    background:var(--card-2);color:var(--ink);font:inherit;font-size:13px;
+    transition:border-color .2s,box-shadow .2s,background .2s;
+  }
+  input::placeholder{color:color-mix(in srgb,var(--muted) 65%,transparent);}
+  input:hover,select:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));}
+  input:focus,select:focus{outline:none;border-color:var(--accent);background:var(--card);box-shadow:0 0 0 4px var(--accent-soft);}
+  input[type=file]{padding:8px;cursor:pointer;}
+  input[type=file]::file-selector-button{margin-right:12px;border:none;background:var(--accent-soft);color:var(--accent-ink);font-weight:700;padding:7px 12px;border-radius:0;cursor:pointer;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+
+  button{
+    font:inherit;font-size:12.5px;font-weight:700;border:1px solid transparent;
+    background:var(--grad);color:#fff;padding:7px 14px;border-radius:0;cursor:pointer;margin-top:14px;
+    box-shadow:0 6px 14px -9px rgba(61,69,84,.35);
+    transition:transform .15s,box-shadow .2s,filter .2s,background .2s;
+  }
+  button:hover{transform:translateY(-1px);filter:brightness(1.07);box-shadow:0 8px 16px -8px rgba(61,69,84,.4);}
+  button:active{transform:translateY(0) scale(.98);}
+  button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-soft);}
+  button.ghost{background:transparent;color:var(--accent-ink);border-color:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:none;}
+  button.ghost:hover{background:var(--accent-soft);filter:none;box-shadow:none;}
+  button.small{padding:4px 9px;font-size:11.5px;margin-top:0;border-radius:0;}
+  button.danger{background:#E11D48;box-shadow:0 6px 14px -8px rgba(225,29,72,.5);}
+  button:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+  .btn-row button{margin-top:14px;}
+
+  #login-panel{width:calc(100% - 32px);}
+  #log{margin-top:14px;font-size:12.5px;color:var(--muted);min-height:18px;}
+  #log.err{color:var(--danger);}
+
+
+  /* ---------- barra de ferramentas + menus flutuantes ---------- */
+  .toolbar > button{margin-top:0;}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;margin:14px 0;}
+  .view > .toolbar:first-child{margin-top:0;}
+  .fm-wrap{position:relative;display:inline-block;}
+  .fm-wrap > .fm-btn{
+    margin-top:0;display:inline-flex;align-items:center;gap:8px;
+    background:var(--header-bg);color:var(--header-ink);
+  }
+  .fm-wrap > .fm-btn::after{content:"▾";font-size:11px;opacity:.85;transition:transform .15s;}
+  .fm-wrap.open > .fm-btn::after{transform:rotate(180deg);}
+  .fm-wrap.open > .fm-btn{filter:brightness(1.18);}
+  .float-menu{
+    display:none;position:fixed;inset:0;margin:auto;height:fit-content;z-index:60;
+    width:min(460px,calc(100vw - 28px));max-height:min(88vh,760px);overflow:auto;
+    background:var(--card);border:1px solid var(--line);border-top:3px solid var(--header-bg);
+    box-shadow:var(--shadow-lg);padding:18px 20px;
+  }
+  .float-menu.wide{width:min(560px,calc(100vw - 28px));}
+  .fm-wrap.open::before{content:"";position:fixed;inset:0;z-index:59;background:rgba(8,12,24,.45);animation:fade .18s both;}
+  .fm-wrap.open > .float-menu{display:block;animation:pop .18s ease both;}
+  .float-menu h2{margin-bottom:12px;}
+  .fm-close{
+    margin:0 0 0 auto;padding:1px 9px;font-size:16px;line-height:1.3;font-weight:600;
+    background:transparent;color:var(--muted);border:1px solid var(--line);box-shadow:none;
+  }
+  .fm-close:hover{background:var(--card-2);color:var(--ink);transform:none;filter:none;box-shadow:none;}
+
+  /* ---------- painel Pessoa (topo, largura total) ---------- */
+  .pessoa-row{display:grid;grid-template-columns:minmax(200px,300px) minmax(220px,1fr) minmax(240px,1.2fr);gap:18px;align-items:start;}
+  .pessoa-row .pessoa-card{margin-top:0;}
+  .pf label{margin-top:0;}
+  .inline-field{display:flex;gap:8px;}
+  .inline-field input{flex:1;min-width:0;}
+  .inline-field button{margin-top:0;white-space:nowrap;}
+  .pessoa-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end;}
+  .pessoa-form .full{grid-column:1/-1;}
+  .pessoa-form .btn-row button{margin-top:0;}
+  .pessoa-panel .empty{margin-bottom:10px;}
+  #pesq-nome-resultados .side-link{color:var(--ink);}
+  #pesq-nome-resultados .side-link:hover{background:var(--card-2);}
+  @media (max-width:900px){ .pessoa-row{grid-template-columns:1fr;} }
+
+  .filter-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px;}
+  .filter-row > div{flex:0 1 190px;min-width:140px;}
+  .filter-row label{margin-top:0;}
+  .filter-row button{margin-top:0;}
+  .filter-row input,.filter-row select{height:36px;}
+  .filter-row button{height:36px;}
+
+  #tabela-todos-emprestimos td{padding:4px 10px;line-height:1.35;}
+  #tabela-todos-emprestimos tbody tr:nth-child(even){background:color-mix(in srgb,var(--card-2) 65%,var(--card));}
+  #tabela-todos-emprestimos tbody tr:hover{background:var(--accent-soft);}
+  #tabela-todos-emprestimos .badge{background:transparent;padding:0;font-size:11px;}
+  #tabela-todos-emprestimos .badge::before{display:none;}
+
+  .grid-eq{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
+  .grid-eq > .panel{margin-top:0;}
+  @media (max-width:1000px){ .grid-eq{grid-template-columns:1fr;} .grid-eq > .panel + .panel{margin-top:14px;} }
+
+  /* ---------- login ---------- */
+  .login-brand{display:flex;align-items:center;gap:14px;margin-bottom:20px;}
+  .login-brand h2{margin:0;font-size:20px;}
+  .login-brand h2::before{display:none;}
+  .login-brand .sub{margin:2px 0 0;color:var(--muted);font-size:12.5px;}
+
+  /* ---------- pessoa ---------- */
+  .pessoa-card{margin-top:16px;padding:12px 14px;border:1px solid var(--line);border-radius:0;background:var(--accent-soft);}
+  .pc-inner{display:flex;align-items:center;gap:12px;}
+  .pessoa-card .nome{font-weight:800;font-size:15px;line-height:1.25;}
+  .pessoa-card .nif-txt{font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',ui-monospace,monospace;}
+
+  /* ---------- KPIs e progresso ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;}
+  .kpi{background:var(--card-2);border:1px solid var(--line);border-radius:0;padding:9px 12px;transition:transform .2s,border-color .2s;}
+  .kpi:hover{transform:translateY(-2px);border-color:var(--accent);}
+  .kpi .k-label{font-size:10.5px;font-weight:600;color:var(--muted);}
+  .kpi .k-value{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:16px;font-weight:700;margin-top:2px;}
+  .progress-wrap{margin:-2px 0 18px;}
+  .progress-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-bottom:8px;}
+  .progress-head strong{color:var(--ink);font-family:'IBM Plex Mono',ui-monospace,monospace;}
+  .progress{height:10px;background:var(--card-2);border:1px solid var(--line);border-radius:0;overflow:hidden;}
+  .progress > i{display:block;height:100%;width:0;background:var(--grad);border-radius:0;transition:width .9s cubic-bezier(.2,.8,.2,1);}
+
+  /* ---------- tabelas ---------- */
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;}
+  th{text-align:left;padding:8px 10px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);white-space:nowrap;}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);}
+  tbody tr{transition:background .15s;}
+  tbody tr:hover{background:var(--card-2);}
+  tbody tr:last-child td{border-bottom:none;}
+  td.num,th.num{text-align:right;}
+  td.num{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap;}
+  tr.loan-row{cursor:pointer;}
+  tr.loan-row:hover{background:var(--accent-soft);}
+  tr.loan-row.selected{background:var(--accent-soft);}
+  tr.loan-row.selected td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
+  tr.row-paid td{color:var(--muted);}
+  tr.row-paid td.num.pago-cell{text-decoration:none !important;color:var(--ok);}
+  tr.row-paid td.num{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--muted) 55%,transparent);}
+  td.pos{color:var(--ok);font-weight:600;}
+  td.neg{color:var(--danger);font-weight:600;}
+
+  .badge{display:inline-block;padding:3px 10px;border-radius:0;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;}
+  .badge::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:7px;vertical-align:middle;}
+  .badge.ativo,.badge.pago,.badge.compensado,.badge.entrada,.badge.liquidado{background:var(--ok-soft);color:var(--ok);}
+  .badge.emitido,.badge.pendente,.badge.parcial{background:var(--warn-soft);color:var(--warn);}
+  .badge.cancelado,.badge.atrasado,.badge.saida,.badge.anulado{background:var(--danger-soft);color:var(--danger);}
+
+  .divider{border:none;border-top:1px solid var(--line);margin:18px 0;}
+  .empty{color:var(--muted);font-size:13px;padding:6px 0;}
+  #lista-vazia,#movimentos-vazio,#cheques-vazio{text-align:center;padding:28px 16px;margin-top:12px;border:1.5px dashed var(--line);border-radius:0;}
+  .hidden-by-role{display:none !important;}
+
+  /* ---------- saldo ---------- */
+  .saldo-hero{
+    position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;
+    padding:20px 24px;margin-bottom:16px;border-radius:0;color:#fff;background:var(--grad);
+    box-shadow:0 10px 24px -14px rgba(61,69,84,.45);animation:rise .45s both;
+  }
+  .saldo-hero > *{position:relative;z-index:1;}
+  .saldo-hero .label{font-size:11px;font-weight:600;opacity:.85;}
+  .saldo-hero .sh-main .valor{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:clamp(24px,4vw,34px);font-weight:700;letter-spacing:-.02em;line-height:1.15;}
+  .sh-side{display:flex;gap:12px;flex-wrap:wrap;}
+  .sh-chip{display:flex;align-items:center;gap:10px;padding:9px 14px;min-width:160px;border-radius:0;background:rgba(255,255,255,.14);}
+  .sh-chip .valor.small{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:15px;font-weight:700;}
+
+  .view{display:none;}
+  .view.active{display:block;animation:fade .35s ease both;}
+
+  /* ---------- notificações, modal ---------- */
+  #toasts{position:fixed;right:18px;bottom:18px;z-index:200;display:flex;flex-direction:column;gap:10px;pointer-events:none;}
+  .toast{
+    pointer-events:auto;display:flex;align-items:flex-start;gap:10px;max-width:360px;padding:12px 14px;
+    border-radius:0;background:var(--card);border:1px solid var(--line);border-left-width:4px;
+    box-shadow:var(--shadow-lg);font-size:13px;font-weight:600;animation:toastIn .35s cubic-bezier(.2,.9,.3,1.2) both;
+  }
+  .toast.ok{border-left-color:var(--ok);} .toast.err{border-left-color:var(--danger);}
+  .toast.out{animation:toastOut .3s ease both;}
+  @keyframes toastIn{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:none}}
+  @keyframes toastOut{to{opacity:0;transform:translateX(24px)}}
+
+  #modal{position:fixed;inset:0;z-index:150;display:none;place-items:center;padding:16px;background:rgba(8,12,24,.55);backdrop-filter:blur(4px);}
+  #modal.open{display:grid;animation:fade .2s both;}
+  .modal-card{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:0;padding:24px;box-shadow:var(--shadow-lg);animation:pop .25s cubic-bezier(.2,.9,.3,1.2) both;}
+  .modal-card h3{margin:0 0 8px;font-size:17px;font-weight:800;}
+  .modal-card p{margin:0;color:var(--muted);font-size:13.5px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px;}
+  .modal-actions button{margin-top:0;}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;}
+  }
+
+  /* ---------- IMPRESSÃO DE CHEQUE ---------- */
+  #print-cheque{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #print-cheque, #print-cheque *{visibility:visible;}
+    #print-cheque{display:block;position:fixed;top:0;left:0;width:100%;padding:24px;background:#fff;color:#111;}
+  }
+  .cheque-layout{position:relative;border:1.5px solid #222;padding:0 0 20px;font-family:'IBM Plex Mono',ui-monospace,monospace;color:#111;background:#fff;max-width:620px;margin:0 auto;}
+  .cheque-layout .pc-topo{display:flex;justify-content:space-between;align-items:center;background:#15417e;color:#fff;padding:10px 16px;}
+  .cheque-layout .pc-banco{font-family:'IBM Plex Sans',sans-serif;font-size:19px;font-weight:800;}
+  .cheque-layout .pc-pais{font-size:11px;font-weight:700;line-height:1.1;text-align:right;}
+  .cheque-layout .pc-sede{font-size:11px;font-weight:700;padding:4px 16px 0;color:#444;}
+  .cheque-layout .pc-titular{font-size:14px;font-weight:700;padding:10px 16px 4px;border-bottom:1.5px solid #15417e;margin:0 16px;}
+  .cheque-layout .pc-linha-pague{display:flex;align-items:center;gap:10px;padding:12px 16px 4px;font-size:13px;flex-wrap:wrap;}
+  .cheque-layout .pc-moeda{font-weight:700;}
+  .cheque-layout .pc-caixa-valor{margin-left:auto;border:1.5px solid #222;padding:5px 10px;font-size:17px;font-weight:700;letter-spacing:.05em;}
+  .cheque-layout .pc-linha-local{display:flex;justify-content:space-between;align-items:flex-end;padding:10px 16px;font-size:12px;color:#333;}
+  .cheque-layout .pc-linha-local strong{font-size:14px;color:#111;}
+  .cheque-layout .pc-data-caixas{display:flex;gap:8px;}
+  .cheque-layout .pc-data-caixas div{border:1.5px solid #222;padding:4px 10px;text-align:center;}
+  .cheque-layout .pc-data-caixas span{display:block;font-size:15px;font-weight:700;}
+  .cheque-layout .pc-data-caixas small{font-size:9px;color:#555;}
+  .cheque-layout .pc-campo{margin:14px 16px 0;font-size:14px;padding-bottom:6px;border-bottom:1px dashed #999;}
+  .cheque-layout .pc-extenso{font-size:13.5px;}
+  .cheque-layout .pc-rodape{display:flex;gap:28px;margin:18px 16px 0;padding-top:10px;border-top:1px solid #ccc;font-size:11px;color:#444;}
+  .cheque-layout .pc-rodape strong{font-size:14px;color:#111;}
+  .cheque-layout .assinatura{margin:30px 16px 0;display:flex;justify-content:flex-end;}
+  .cheque-layout .assinatura div{border-top:1px solid #444;width:220px;text-align:center;font-size:11.5px;padding-top:4px;color:#555;}
+</style>
+
+</head>
+<body class="sidebar-closed">
+
+<div id="topbar"></div>
+
+<header>
+  <div class="brand">
+    <button class="icon-btn menu-btn" id="sidebar-toggle" onclick="toggleSidebar()" title="Mostrar/ocultar menu" aria-label="Mostrar/ocultar menu"><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span></button>
+    <div>
+      <h1>Livro de Empréstimos</h1>
+      <p>Empréstimos · Banco · Cheques</p>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <span class="status-pill" title="Estado da ligação">
+      <span id="status-dot"></span><span id="status-text">A ligar...</span>
+    </span>
+    <span id="user-bar" style="display:none;">
+      <span class="user-chip">
+        <span class="avatar sm" id="user-avatar">?</span>
+        <span class="uc-text"><span id="user-email"></span><span id="user-papel" class="papel-tag"></span></span>
+        <span class="conn-label logout" onclick="sair()">Sair</span>
+      </span>
+    </span>
+  </div>
+</header>
+
+<!-- LOGIN -->
+<section class="panel" id="login-panel" style="display:none;max-width:420px;margin:48px auto;">
+  <div class="login-brand">
+    <div>
+      <h2 id="login-titulo">Iniciar sessão</h2>
+      <p class="sub">Acede ao teu livro de empréstimos</p>
+    </div>
+  </div>
+  <label for="login-email">Email</label>
+  <input id="login-email" type="email" placeholder="email@exemplo.com" autocomplete="username">
+  <label for="login-pass">Palavra-passe</label>
+  <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+  <div class="btn-row">
+    <button onclick="entrar()" id="btn-entrar">Entrar</button>
+  </div>
+  <div class="empty" style="margin-top:10px;">Não tens conta? Pede ao administrador para te criar uma.</div>
+  <div id="login-log" class="empty" style="margin-top:6px;"></div>
+</section>
+
+<div id="app-content" style="display:none;">
+<div class="app-layout">
+<div id="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+<aside id="sidebar">
+  <div class="side-group">
+    <div class="side-title">Empréstimos</div>
+    <button class="side-link active" data-view="emprestimos" onclick="mudarVista('emprestimos')">Novo / Pesquisar</button>
+    <button class="side-link" data-view="lista" onclick="mudarVista('lista')">Lista de empréstimos</button>
+    <button class="side-link" data-view="pagamentos" onclick="mudarVista('pagamentos')">Pagamentos</button>
+    <button class="side-link" data-view="simulador" onclick="mudarVista('simulador')">Simulador</button>
+  </div>
+  <div class="side-group">
+    <div class="side-title">Banco</div>
+    <button class="side-link" data-view="banco" onclick="mudarVista('banco')">Movimentos e saldo</button>
+    <button class="side-link" data-view="cheques" onclick="mudarVista('cheques')">Cheques</button>
+  </div>
+  <div class="side-group">
+    <div class="side-title">Relatórios</div>
+    <button class="side-link" data-view="resumo" onclick="mudarVista('resumo')">Resumo mensal</button>
+  </div>
+  <div class="side-group">
+    <div class="side-title">Administração</div>
+    <button class="side-link gestao-only" data-view="utilizadores" onclick="mudarVista('utilizadores')">Utilizadores</button>
+    <button class="side-link" data-view="conta" onclick="mudarVista('conta')">A minha conta</button>
+  </div>
+</aside>
+<main>
+  <!-- ==================== VISTA: EMPRÉSTIMOS ==================== -->
+  <div class="view active" id="view-emprestimos">
+    <section class="panel pessoa-panel">
+      <h2>Pessoa</h2>
+      <div class="pessoa-row">
+        <div class="pf">
+          <label for="nif">NIF</label>
+          <div class="inline-field">
+            <input id="nif" placeholder="123456789">
+            <button class="ghost" onclick="procurarPessoa()">Procurar</button>
+          </div>
+        </div>
+        <div class="pf">
+          <label for="pesq-nome">ou pesquisar por nome</label>
+          <input id="pesq-nome" placeholder="Escreve parte do nome..." oninput="pesquisarPorNome()">
+          <div id="pesq-nome-resultados"></div>
+        </div>
+        <div id="pessoa-card" style="display:none" class="pessoa-card">
+          <div class="pc-inner">
+            <div class="avatar" id="pessoa-avatar">?</div>
+            <div>
+              <div class="nome" id="pessoa-nome"></div>
+              <div id="pessoa-nif-txt" class="nif-txt"></div>
+              <div id="pessoa-limite-txt" class="nif-txt"></div>
+            </div>
+          </div>
+          <button class="small ghost gestao-only" style="margin-top:10px;" onclick="mostrarEditarPessoa()">Editar</button>
+        </div>
+      </div>
+
+      <div id="editar-pessoa" class="gestao-only" style="display:none">
+        <hr class="divider">
+        <div class="empty">A editar pessoa existente.</div>
+        <div class="pessoa-form">
+          <div class="pf"><label for="edit-nome">Nome</label><input id="edit-nome" placeholder="Nome completo"></div>
+          <div class="pf"><label for="edit-contacto">Contacto</label><input id="edit-contacto" placeholder="Opcional"></div>
+          <div class="pf"><label for="edit-limite">Limite de crédito (opcional)</label><input id="edit-limite" type="number" step="0.01" placeholder="Deixa em branco para não haver limite"></div>
+          <div class="btn-row">
+            <button onclick="guardarEdicaoPessoa()">Guardar</button>
+            <button class="ghost" onclick="document.getElementById('editar-pessoa').style.display='none'">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="criar-pessoa" class="gestao-only" style="display:none">
+        <hr class="divider">
+        <div class="empty">Este NIF ainda não está registado.</div>
+        <div class="pessoa-form">
+          <div class="pf"><label for="novo-nome">Nome</label><input id="novo-nome" placeholder="Nome completo"></div>
+          <div class="pf"><label for="novo-contacto">Contacto</label><input id="novo-contacto" placeholder="Opcional"></div>
+          <div class="pf"><label for="novo-limite">Limite de crédito (opcional)</label><input id="novo-limite" type="number" step="0.01" placeholder="Deixa em branco para não haver limite"></div>
+          <div class="btn-row"><button onclick="criarPessoa()">Registar pessoa</button></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="toolbar">
+      <div class="fm-wrap gestao-only" id="novo-emp-panel" style="display:none">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Novo empréstimo</button>
+        <div class="float-menu">
+          <h2>Novo empréstimo</h2>
+          <label for="valor">Valor</label>
+          <input id="valor" type="number" step="0.01" placeholder="10000.00">
+          <div class="row2">
+            <div>
+              <label for="taxa">Taxa de juro anual (%)</label>
+              <input id="taxa" type="number" step="0.01" placeholder="12.5">
+            </div>
+            <div>
+              <label for="prestacoes">Nº de prestações</label>
+              <input id="prestacoes" type="number" placeholder="24">
+            </div>
+          </div>
+          <div class="row2">
+            <div>
+              <label for="periodicidade">Periodicidade</label>
+              <select id="periodicidade">
+                <option value="MENSAL">Mensal</option>
+                <option value="TRIMESTRAL">Trimestral</option>
+                <option value="ANUAL">Anual</option>
+              </select>
+            </div>
+            <div>
+              <label for="data-inicio">Data de início</label>
+              <input id="data-inicio" type="date">
+            </div>
+          </div>
+          <button data-fm-autoclose onclick="criarEmprestimo()">Criar empréstimo e gerar mapa</button>
+        </div>
+      </div>
+      <div class="fm-wrap gestao-only">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Importar empréstimo existente</button>
+        <div class="float-menu wide">
+          <h2>Importar empréstimos existentes</h2>
+          <div class="empty">
+            Para carregar empréstimos já concedidos, usa o modelo Excel: <strong>uma linha por empréstimo</strong> (NIF, nome, data de início, valor, taxa, nº de prestações e o valor já pago até agora). O sistema cria a pessoa automaticamente se o NIF não existir, gera o mapa de amortização sozinho, e distribui o "Valor Pago" pelas primeiras prestações, marcando-as como pagas.
+          </div>
+          <button class="ghost" onclick="exportarModeloEmprestimos()">Descarregar modelo Excel</button>
+          <label for="ie-file">Ficheiro preenchido (.xlsx)</label>
+          <input id="ie-file" type="file" accept=".xlsx,.xls">
+          <button onclick="importarEmprestimosExistentes()">Importar empréstimos</button>
+          <div id="import-emp-log" class="empty" style="margin-top:12px;"></div>
+        </div>
+      </div>
+    </div>
+
+        <section class="panel" id="lista-panel" style="display:none">
+          <h2>Empréstimos deste NIF</h2>
+          <div class="kpis">
+            <div class="kpi"><div class="k-label">Empréstimos</div><div class="k-value" id="kpi-emp-n">0</div></div>
+            <div class="kpi"><div class="k-label">Total emprestado</div><div class="k-value" id="kpi-emp-total">0,00</div></div>
+            <div class="kpi"><div class="k-label">Taxa média anual</div><div class="k-value" id="kpi-emp-taxa">0,00%</div></div>
+          </div>
+          <table id="tabela-emprestimos">
+            <thead><tr><th>Data início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th>Estado</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty" id="lista-vazia" style="display:none">Ainda não há empréstimos registados para este NIF.</div>
+        </section>
+
+        <section class="panel" id="mapa-section" style="display:none">
+          <h2>Mapa de amortização <small id="mapa-sub"></small></h2>
+          <div class="progress-wrap">
+            <div class="progress-head"><span id="mapa-progress-label"></span><span>Capital em dívida: <strong id="mapa-divida">0,00</strong></span></div>
+            <div class="progress"><i id="mapa-progress-bar"></i></div>
+          </div>
+          <div class="btn-row gestao-only" id="emp-acoes">
+            <button class="ghost" onclick="mostrarEditarEmprestimo()" id="btn-editar-emp">Editar empréstimo</button>
+            <button class="ghost" onclick="liquidarAntecipadamente()" id="btn-liquidar-emp">Liquidar antecipadamente</button>
+            <button class="danger" onclick="anularEmprestimo()" id="btn-anular-emp">Anular empréstimo</button>
+          </div>
+
+          <div id="editar-emprestimo" class="gestao-only" style="display:none">
+            <hr class="divider">
+            <div class="empty">A editar este empréstimo — o mapa é recalculado ao gravar. Se já houver valores recebidos, são redistribuídos pelas primeiras prestações do novo mapa (os movimentos do banco não mudam).</div>
+            <label for="edit-emp-valor">Valor</label>
+            <input id="edit-emp-valor" type="number" step="0.01">
+            <div class="row2">
+              <div><label for="edit-emp-taxa">Taxa de juro anual (%)</label><input id="edit-emp-taxa" type="number" step="0.01"></div>
+              <div><label for="edit-emp-prestacoes">Nº de prestações</label><input id="edit-emp-prestacoes" type="number"></div>
+            </div>
+            <div class="row2">
+              <div>
+                <label for="edit-emp-periodicidade">Periodicidade</label>
+                <select id="edit-emp-periodicidade">
+                  <option value="MENSAL">Mensal</option>
+                  <option value="TRIMESTRAL">Trimestral</option>
+                  <option value="ANUAL">Anual</option>
+                </select>
+              </div>
+              <div><label for="edit-emp-data">Data de início</label><input id="edit-emp-data" type="date"></div>
+            </div>
+            <div class="btn-row">
+              <button onclick="guardarEdicaoEmprestimo()">Guardar e recalcular mapa</button>
+              <button class="ghost" onclick="document.getElementById('editar-emprestimo').style.display='none'">Cancelar</button>
+            </div>
+          </div>
+
+          <table>
+            <thead><tr><th>#</th><th>Vencimento</th><th class="num">Prestação</th><th class="num">Juro</th><th class="num">Capital</th><th class="num">Em dívida</th><th class="num">Pago</th><th>Estado</th><th></th></tr></thead>
+            <tbody id="mapa-body"></tbody>
+          </table>
+        </section>
+  </div>
+
+  <!-- ==================== VISTA: LISTA ==================== -->
+  <div class="view" id="view-lista">
+    <section class="panel">
+      <h2>Todos os empréstimos concedidos</h2>
+      <div class="kpis">
+        <div class="kpi"><div class="k-label">Empréstimos</div><div class="k-value" id="kpi-todos-n">0</div></div>
+        <div class="kpi"><div class="k-label">Total concedido</div><div class="k-value" id="kpi-todos-total">0,00</div></div>
+        <div class="kpi"><div class="k-label">Prestações pagas</div><div class="k-value" id="kpi-todos-pagas">0</div></div>
+        <div class="kpi"><div class="k-label">Prestações atrasadas</div><div class="k-value" id="kpi-todos-atrasadas">0</div></div>
+        <div class="kpi"><div class="k-label">Prestações por pagar</div><div class="k-value" id="kpi-todos-porpagar">0</div></div>
+      </div>
+      <div class="filter-row">
+        <div>
+          <label for="filtro-estado">Estado</label>
+          <select id="filtro-estado" onchange="aplicarFiltrosLista()">
+            <option value="">Todos</option>
+            <option value="PENDENTE">Pendente</option>
+            <option value="ATRASADO">Atrasado</option>
+            <option value="PAGO">Pago</option>
+            <option value="LIQUIDADO">Liquidado</option>
+            <option value="ANULADO">Anulado</option>
+          </select>
+        </div>
+        <div><label for="filtro-data-de">Início de</label><input id="filtro-data-de" type="date" onchange="aplicarFiltrosLista()"></div>
+        <div><label for="filtro-data-ate">Início até</label><input id="filtro-data-ate" type="date" onchange="aplicarFiltrosLista()"></div>
+        <button class="ghost" onclick="limparFiltrosLista()">Limpar filtros</button>
+      </div>
+      <table id="tabela-todos-emprestimos">
+        <thead><tr><th>NIF</th><th>Nome</th><th>Início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th>Estado</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="todos-emprestimos-vazio" style="display:none">Ainda não há empréstimos registados.</div>
+    </section>
+  </div>
+
+  <div class="view" id="view-banco">
+    <div class="saldo-hero">
+      <div class="sh-main">
+        <div class="label">Saldo atual</div>
+        <div class="valor" id="saldo-atual-valor">—</div>
+      </div>
+      <div class="sh-side">
+        <div class="sh-chip"><div><div class="label">Total entradas</div><div class="valor small" id="saldo-entradas">—</div></div></div>
+        <div class="sh-chip"><div><div class="label">Total saídas</div><div class="valor small" id="saldo-saidas">—</div></div></div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="fm-wrap" id="saldo-inicial-panel">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Saldo inicial</button>
+        <div class="float-menu">
+          <h2>Saldo inicial</h2>
+          <div id="saldo-inicial-form" class="gestao-only">
+            <label for="si-valor">Valor do saldo inicial</label>
+            <input id="si-valor" type="number" step="0.01" placeholder="0.00">
+            <label for="si-data">Data</label>
+            <input id="si-data" type="date">
+            <button data-fm-autoclose onclick="definirSaldoInicial()">Definir saldo inicial</button>
+          </div>
+          <div id="saldo-inicial-set" style="display:none" class="empty"></div>
+        </div>
+      </div>
+      <div class="fm-wrap gestao-only">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Registar movimento</button>
+        <div class="float-menu">
+          <h2>Registar movimento</h2>
+          <label for="mov-tipo">Tipo</label>
+          <select id="mov-tipo">
+            <option value="ENTRADA">Entrada</option>
+            <option value="SAIDA">Saída</option>
+          </select>
+          <label for="mov-valor">Valor</label>
+          <input id="mov-valor" type="number" step="0.01" placeholder="0.00">
+          <label for="mov-data">Data</label>
+          <input id="mov-data" type="date">
+          <label for="mov-desc">Descrição</label>
+          <input id="mov-desc" placeholder="Ex: depósito, pagamento a fornecedor...">
+          <button data-fm-autoclose onclick="registarMovimento()">Registar</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="panel">
+        <h2>Movimentos</h2>
+        <table>
+          <thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th class="num">Valor</th><th class="num">Saldo</th></tr></thead>
+          <tbody id="movimentos-body"></tbody>
+        </table>
+        <div class="empty" id="movimentos-vazio" style="display:none">Ainda não há movimentos registados.</div>
+      </section>
+  </div>
+
+  <!-- ==================== VISTA: CHEQUES ==================== -->
+  <div class="view" id="view-cheques">
+    <div class="toolbar">
+      <div class="fm-wrap gestao-only">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Emitir cheque</button>
+        <div class="float-menu">
+        <h2>Emitir cheque</h2>
+        <label for="ch-numero">Nº do cheque</label>
+        <input id="ch-numero" placeholder="000123">
+        <label for="ch-beneficiario">Beneficiário</label>
+        <input id="ch-beneficiario" placeholder="Nome do beneficiário">
+        <label for="ch-valor">Valor</label>
+        <input id="ch-valor" type="number" step="0.01" placeholder="0.00">
+        <label for="ch-data">Data de emissão</label>
+        <input id="ch-data" type="date">
+        <label for="ch-motivo">Motivo</label>
+        <input id="ch-motivo" placeholder="Ex: pagamento de fatura...">
+        <button data-fm-autoclose onclick="emitirCheque()">Emitir cheque (regista saída no banco)</button>
+      </div>
+      </div>
+    </div>
+
+    <section class="panel">
+        <h2>Cheques emitidos</h2>
+        <table>
+          <thead><tr><th>Nº</th><th>Data</th><th>Beneficiário</th><th class="num">Valor</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="cheques-body"></tbody>
+        </table>
+        <div class="empty" id="cheques-vazio" style="display:none">Ainda não há cheques emitidos.</div>
+      </section>
+  </div>
+  <!-- ==================== VISTA: PAGAMENTOS ==================== -->
+  <div class="view" id="view-pagamentos">
+    <div class="toolbar">
+      <div class="fm-wrap gestao-only">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Registar pagamento manual</button>
+        <div class="float-menu">
+          <h2>Registar pagamento manual</h2>
+          <label for="pm-nif">NIF</label>
+          <input id="pm-nif" placeholder="123456789" oninput="pmPreviewAgendar()" autocomplete="off">
+          <select id="pm-emp" style="display:none;margin-top:8px;" onchange="pmPreview()"></select>
+          <div id="pm-info" class="empty"></div>
+          <div class="row2">
+            <div>
+              <label for="pm-data">Data de pagamento</label>
+              <input id="pm-data" type="date">
+            </div>
+            <div>
+              <label for="pm-valor">Valor pago (opcional)</label>
+              <input id="pm-valor" type="number" step="0.01" placeholder="em branco = o que falta da prestação">
+            </div>
+          </div>
+          <button data-fm-autoclose onclick="registarPagamentoManual()">Registar pagamento</button>
+          <div class="empty">O pagamento fica registado na próxima prestação por pagar do empréstimo ativo deste NIF. Se a pessoa tiver mais de um empréstimo ativo, escolhe qual na lista. O valor pode ser só uma parte da prestação (fica pagamento parcial) ou mais do que ela (o excedente passa para as prestações seguintes).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-eq">
+      <section class="panel">
+          <h2>Exportar prestações pendentes</h2>
+          <div class="empty">Gera um Excel com todas as prestações por pagar, pronto a preencher e reimportar.</div>
+          <button class="ghost" onclick="exportarPendentes()">Exportar para Excel</button>
+        </section>
+      <section class="panel gestao-only">
+        <h2>Importar pagamentos por Excel</h2>
+        <div class="empty">
+          O ficheiro deve ter as colunas <strong>NIF</strong> e <strong>Data Pagamento</strong> (formato de data), e opcionalmente <strong>Valor Pago</strong>
+          e <strong>Nº Empréstimo</strong> (só necessário se a pessoa tiver mais de um empréstimo ativo).
+          Cada linha paga a próxima prestação por pagar desse NIF; para pagar duas prestações, usa duas linhas.
+          Se a coluna <strong>ID Prestação</strong> estiver preenchida (como no ficheiro exportado), esse ID tem prioridade.
+          Só as linhas com Data Pagamento preenchida são processadas. Em <strong>Valor Pago</strong> podes pôr só uma parte (pagamento parcial) ou mais do que a prestação (o excedente passa para as seguintes); em branco paga o que falta.
+        </div>
+        <label for="pm-file">Ficheiro Excel (.xlsx)</label>
+        <input id="pm-file" type="file" accept=".xlsx,.xls">
+        <button onclick="importarPagamentosExcel()">Processar ficheiro</button>
+        <div id="import-log" class="empty" style="margin-top:14px;"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ==================== VISTA: UTILIZADORES ==================== -->
+  <div class="view" id="view-utilizadores">
+    <section class="panel gestao-only">
+      <h2>Definições dos cheques</h2>
+      <div class="row2">
+        <div>
+          <label for="cfg-titular">Titular da conta (nome impresso no cheque)</label>
+          <input id="cfg-titular" placeholder="Fundação Social Forças Armadas">
+        </div>
+        <div>
+          <label for="cfg-conta">Nº de conta</label>
+          <input id="cfg-conta" placeholder="Opcional">
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label for="cfg-local-emissao">Local de emissão</label>
+          <input id="cfg-local-emissao" placeholder="Praia">
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label>Moeda (singular / plural)</label>
+          <div class="row2">
+            <input id="cfg-moeda-sing" placeholder="escudo">
+            <input id="cfg-moeda-plur" placeholder="escudos">
+          </div>
+        </div>
+        <div>
+          <label>Subunidade (singular / plural)</label>
+          <div class="row2">
+            <input id="cfg-sub-sing" placeholder="centavo">
+            <input id="cfg-sub-plur" placeholder="centavos">
+          </div>
+        </div>
+      </div>
+      <button onclick="guardarDefinicoes()">Guardar definições</button>
+    </section>
+
+    <section class="panel gestao-only">
+      <h2>Criar utilizador</h2>
+      <div class="empty">O utilizador entra diretamente com este email e palavra-passe — não precisa de se registar nem de confirmar email.</div>
+      <label for="nu-email">Email</label>
+      <input id="nu-email" type="email" placeholder="email@exemplo.com">
+      <label for="nu-pass">Palavra-passe inicial</label>
+      <input id="nu-pass" type="password" placeholder="mínimo 6 caracteres">
+      <label for="nu-papel">Perfil</label>
+      <select id="nu-papel">
+        <option value="consulta">Consulta</option>
+        <option value="gestao">Gestão</option>
+      </select>
+      <button onclick="criarUtilizador()">Criar utilizador</button>
+    </section>
+
+    <section class="panel">
+      <h2>Utilizadores e perfis</h2>
+      <div class="empty">
+        Perfil <strong>consulta</strong>: só pode ver dados. Perfil <strong>gestão</strong>: pode criar, editar e apagar, e criar novos utilizadores.
+      </div>
+      <table>
+        <thead><tr><th>Email</th><th>Papel</th><th></th></tr></thead>
+        <tbody id="utilizadores-body"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- ==================== VISTA: CONTA ==================== -->
+  <div class="view" id="view-conta">
+    <section class="panel" style="max-width:420px;">
+      <h2>A minha conta</h2>
+      <div class="empty">A tua sessão está associada ao email <strong id="conta-email"></strong>.</div>
+      <label for="np-pass1">Nova palavra-passe</label>
+      <input id="np-pass1" type="password" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+      <label for="np-pass2">Confirmar nova palavra-passe</label>
+      <input id="np-pass2" type="password" placeholder="repete a palavra-passe" autocomplete="new-password">
+      <button onclick="alterarPassword()">Alterar palavra-passe</button>
+    </section>
+  </div>
+
+  <!-- ==================== VISTA: SIMULADOR ==================== -->
+  <div class="view" id="view-simulador">
+    <div class="toolbar">
+      <div class="fm-wrap">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Simulador de empréstimo</button>
+        <div class="float-menu wide">
+        <h2>Simulador de empréstimo</h2>
+        <div class="empty">Calcula um mapa de amortização sem gravar nada — útil para responder "e se for X em Y prestações?" na hora.</div>
+        <label for="sim-valor">Valor</label>
+        <input id="sim-valor" type="number" step="0.01" placeholder="10000.00">
+        <div class="row2">
+          <div><label for="sim-taxa">Taxa de juro anual (%)</label><input id="sim-taxa" type="number" step="0.01" placeholder="12.5"></div>
+          <div><label for="sim-prestacoes">Nº de prestações</label><input id="sim-prestacoes" type="number" placeholder="24"></div>
+        </div>
+        <div class="row2">
+          <div>
+            <label for="sim-periodicidade">Periodicidade</label>
+            <select id="sim-periodicidade">
+              <option value="MENSAL">Mensal</option>
+              <option value="TRIMESTRAL">Trimestral</option>
+              <option value="ANUAL">Anual</option>
+            </select>
+          </div>
+          <div><label for="sim-data">Data de início</label><input id="sim-data" type="date"></div>
+        </div>
+        <button onclick="simular()">Simular</button>
+      </div>
+      </div>
+      <button type="button" class="ghost" onclick="limparSimulacao()">Limpar simulação</button>
+    </div>
+
+    <section class="panel" id="sim-resultado" style="display:none">
+        <h2>Resultado da simulação</h2>
+        <div class="kpis">
+          <div class="kpi"><div class="k-label">Prestação fixa</div><div class="k-value" id="sim-prestacao-fixa">0,00</div></div>
+          <div class="kpi"><div class="k-label">Total a pagar</div><div class="k-value" id="sim-total-pagar">0,00</div></div>
+          <div class="kpi"><div class="k-label">Total de juros</div><div class="k-value" id="sim-total-juros">0,00</div></div>
+        </div>
+        <table>
+          <thead><tr><th>#</th><th>Vencimento</th><th class="num">Prestação</th><th class="num">Juro</th><th class="num">Capital</th><th class="num">Em dívida</th></tr></thead>
+          <tbody id="sim-body"></tbody>
+        </table>
+        <div class="empty">Esta simulação não fica gravada. Para criar o empréstimo a sério, pesquisa/regista a pessoa na aba Empréstimos — os valores já ficam prontos no formulário.</div>
+      </section>
+  </div>
+
+  <!-- ==================== VISTA: RESUMO MENSAL ==================== -->
+  <div class="view" id="view-resumo">
+    <section class="panel">
+      <h2>Resumo mensal</h2>
+      <div class="empty">Total emprestado e total recebido em cada mês, com base na data de início dos empréstimos e na data de pagamento das prestações.</div>
+      <table>
+        <thead><tr><th>Mês</th><th class="num">Emprestado</th><th class="num">Recebido</th><th style="width:120px;"></th><th style="width:120px;"></th></tr></thead>
+        <tbody id="resumo-body"></tbody>
+      </table>
+      <div class="empty" id="resumo-vazio" style="display:none">Ainda não há dados suficientes.</div>
+    </section>
+  </div>
+</main>
+</div>
+</div>
+<!-- fim #app-content -->
+<div id="print-cheque">
+  <div class="cheque-layout">
+    <div class="pc-topo">
+      <div class="pc-banco">Banco Interatlântico</div>
+      <div class="pc-pais">CABO<br>VERDE</div>
+    </div>
+    <div class="pc-sede">SEDE</div>
+    <div class="pc-titular" id="pc-titular"></div>
+    <div class="pc-linha-pague">
+      <span>Pague por este cheque</span>
+      <span class="pc-moeda" id="pc-moeda"></span>
+      <span class="pc-caixa-valor" id="pc-valor"></span>
+    </div>
+    <div class="pc-linha-local">
+      <div>Local de Emissão<br><strong id="pc-local"></strong></div>
+      <div class="pc-data-caixas">
+        <div><span id="pc-ano"></span><small>Ano</small></div>
+        <div><span id="pc-mes"></span><small>Mês</small></div>
+        <div><span id="pc-dia"></span><small>Dia</small></div>
+      </div>
+    </div>
+    <div class="pc-campo">à ordem de <strong id="pc-beneficiario"></strong></div>
+    <div class="pc-campo pc-extenso" id="pc-extenso"></div>
+    <div class="pc-rodape">
+      <div>Número de Conta<br><strong id="pc-conta"></strong></div>
+      <div>Número de Cheque<br><strong id="pc-numero"></strong></div>
+    </div>
+    <div class="assinatura"><div>Assinatura</div></div>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+<div id="modal" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <h3 id="modal-title"></h3>
+    <p id="modal-text"></p>
+    <div class="modal-actions">
+      <button class="ghost" id="modal-cancel">Cancelar</button>
+      <button id="modal-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let sb = null;
+let pessoaAtual = null;
+let emprestimoAtual = null;
+let mapaAtualLinhas = [];
+let ultimoTodosEmprestimos = [];
+let ultimoPorEmprestimo = new Map();
+let cfg = {};
+let meuPapel = null;
+/* ---------- tema claro/escuro ---------- */
+/* ---------- menu lateral ---------- */
+function toggleSidebar(force){
+  const aberto = force !== undefined ? force : document.body.classList.contains('sidebar-closed');
+  document.body.classList.toggle('sidebar-closed', !aberto);
+  if (aberto) fmCloseAll();
+}
+// o menu lateral começa sempre escondido e volta a esconder-se sozinho
+document.body.classList.add('sidebar-closed');
+
+// altura do cabeçalho: o menu lateral e os menus flutuantes ficam logo abaixo dele
+function medirCabecalho(){
+  const h = document.querySelector('header');
+  if (h) document.documentElement.style.setProperty('--hdr-h', h.offsetHeight + 'px');
+}
+window.addEventListener('resize', medirCabecalho);
+window.addEventListener('load', medirCabecalho);
+medirCabecalho();
+
+/* ---------- menus flutuantes (botão no topo de cada aba) ---------- */
+let fmPendente = null;   // menu cujo botão de gravar acabou de ser carregado
+function fmCloseAll(except){
+  document.querySelectorAll('.fm-wrap.open').forEach(w => { if (w !== except) w.classList.remove('open'); });
+  if (!except) fmPendente = null;
+}
+function toggleFloatMenu(btn){
+  const wrap = btn.closest('.fm-wrap');
+  const abrir = !wrap.classList.contains('open');
+  fmCloseAll(abrir ? wrap : undefined);
+  fmPendente = null;
+  if (!abrir){ wrap.classList.remove('open'); return; }
+  const menu = wrap.querySelector('.float-menu');
+  wrap.classList.add('open');
+  const primeiro = menu.querySelector('input:not([type=file]),select');
+  if (primeiro && window.innerWidth > 600) setTimeout(() => primeiro.focus(), 30);
+}
+// botão de fechar (✕) no título de cada menu
+document.querySelectorAll('.float-menu').forEach(m => {
+  const h2 = m.querySelector('h2');
+  if (!h2) return;
+  const x = document.createElement('button');
+  x.type = 'button'; x.className = 'fm-close'; x.setAttribute('aria-label', 'Fechar'); x.textContent = '×';
+  x.onclick = () => fmCloseAll();
+  h2.appendChild(x);
+});
+// clicar fora fecha; botões de gravar marcados fecham o menu quando a ação corre bem
+document.addEventListener('click', e => {
+  const alvo = e.target;
+  const submit = alvo.closest && alvo.closest('[data-fm-autoclose]');
+  if (submit) fmPendente = submit.closest('.fm-wrap');
+  if (alvo.classList && alvo.classList.contains('fm-wrap')){ fmCloseAll(); return; }
+  if (alvo.closest && (alvo.closest('.fm-wrap') || alvo.closest('#modal') || alvo.closest('#toasts'))) return;
+  fmCloseAll();
+}, true);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ fmCloseAll(); toggleSidebar(false); }
+});
+
+/* ---------- barra de carregamento (qualquer pedido de rede) ---------- */
+(function(){
+  const orig = window.fetch.bind(window);
+  let n = 0;
+  window.fetch = function(...args){
+    n++;
+    const bar = document.getElementById('topbar');
+    if (bar) bar.classList.add('on');
+    return orig(...args).finally(() => {
+      n = Math.max(0, n - 1);
+      const b = document.getElementById('topbar');
+      if (n === 0 && b) b.classList.remove('on');
+    });
+  };
+})();
+
+/* ---------- notificações (toasts) ---------- */
+function toast(msg, tipo){
+  const box = document.getElementById('toasts');
+  if (!box) return;
+  const t = document.createElement('div');
+  t.className = 'toast ' + (tipo === 'err' ? 'err' : 'ok');
+  t.innerHTML = '<span class="t-msg"></span>';
+  t.querySelector('.t-msg').textContent = msg;
+  box.appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, tipo === 'err' ? 5500 : 3200);
+}
+
+/* ---------- confirmação (modal) ---------- */
+function confirmar(titulo, texto, okLabel, perigo){
+  return new Promise(resolve => {
+    const m = document.getElementById('modal');
+    const ok = document.getElementById('modal-ok');
+    const cancel = document.getElementById('modal-cancel');
+    document.getElementById('modal-title').textContent = titulo;
+    document.getElementById('modal-text').textContent = texto;
+    ok.textContent = okLabel || 'Confirmar';
+    ok.className = perigo ? 'danger' : '';
+    m.classList.add('open');
+    const fechar = v => {
+      m.classList.remove('open');
+      document.removeEventListener('keydown', onKey);
+      ok.onclick = null; cancel.onclick = null; m.onclick = null;
+      resolve(v);
+    };
+    const onKey = e => { if (e.key === 'Escape') fechar(false); };
+    document.addEventListener('keydown', onKey);
+    ok.onclick = () => fechar(true);
+    cancel.onclick = () => fechar(false);
+    m.onclick = e => { if (e.target === m) fechar(false); };
+    ok.focus();
+  });
+}
+
+/* ---------- números animados ---------- */
+function animarNumero(el, alvo, dur){
+  dur = dur || 800;
+  const ini = el._v || 0;
+  const t0 = performance.now();
+  function passo(t){
+    const p = Math.min(1, (t - t0) / dur);
+    const e = 1 - Math.pow(1 - p, 3);
+    el.textContent = fmt(ini + (alvo - ini) * e);
+    if (p < 1) requestAnimationFrame(passo); else el._v = alvo;
+  }
+  requestAnimationFrame(passo);
+}
+function setAvatar(nome){
+  const el = document.getElementById('pessoa-avatar');
+  if (el) el.textContent = (nome || '?').trim().split(/\s+/).slice(0, 2).map(s => s[0]).join('').toUpperCase();
+}
+
+/* ---------- utilidades ---------- */
+function log(msg, isErr){
+  if (fmPendente){
+    if (!isErr) fmPendente.classList.remove('open');
+    fmPendente = null;
+  }
+  const el = document.getElementById('log');
+  if (el){ el.textContent = msg; el.className = isErr ? 'err' : ''; }
+  if (msg) toast(msg, isErr ? 'err' : 'ok');
+}
+function fmt(n){
+  return Number(n).toLocaleString('pt-PT', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function hoje(){ return new Date().toISOString().slice(0,10); }
+
+// estado real de uma prestação: PAGO fica PAGO; senão, ATRASADO se já passou da
+// data de vencimento, PENDENTE caso contrário — calculado pela data, não guardado
+function estadoPrestacao(row){
+  if (row.estado === 'PAGO') return 'PAGO';
+  if (row.data_vencimento < hoje()) return 'ATRASADO';
+  return Number(row.valor_pago || 0) > 0.004 ? 'PARCIAL' : 'PENDENTE';
+}
+function badgeClassePrestacao(estado){
+  return estado === 'PAGO' ? 'pago' : (estado === 'ATRASADO' ? 'atrasado' : (estado === 'PARCIAL' ? 'parcial' : 'pendente'));
+}
+// estado de um empréstimo a partir das suas prestações: ATRASADO se alguma
+// prestação estiver em atraso, PAGO se estiverem todas pagas, senão PENDENTE
+function estadoEmprestimoPorPrestacoes(linhas){
+  if (!linhas.length) return 'PENDENTE';
+  let temAtraso = false, todasPagas = true;
+  linhas.forEach(l => {
+    const e = estadoPrestacao(l);
+    if (e === 'ATRASADO') temAtraso = true;
+    if (e !== 'PAGO') todasPagas = false;
+  });
+  if (temAtraso) return 'ATRASADO';
+  return todasPagas ? 'PAGO' : 'PENDENTE';
+}
+function setStatus(ok){
+  document.getElementById('status-dot').className = ok ? 'ok' : '';
+  document.getElementById('status-text').textContent = ok ? 'Ligado' : 'Não ligado';
+}
+function mudarVista(nome){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + nome).classList.add('active');
+  document.querySelectorAll('.side-link').forEach(b => b.classList.toggle('active', b.dataset.view === nome));
+  toggleSidebar(false);
+  fmCloseAll();
+  if (nome !== 'simulador') limparSimulacao();
+  if (nome === 'lista') carregarTodosEmprestimos();
+  if (nome === 'banco') carregarBanco();
+  if (nome === 'cheques') carregarCheques();
+  if (nome === 'utilizadores') carregarUtilizadores();
+  if (nome === 'resumo') carregarResumoMensal();
+}
+
+/* ---------- número por extenso (PT) ---------- */
+const UNI = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+const DEZ19 = ['dez','onze','doze','treze','catorze','quinze','dezasseis','dezassete','dezoito','dezanove'];
+const DEZENAS = ['', '', 'vinte','trinta','quarenta','cinquenta','sessenta','setenta','oitenta','noventa'];
+const CENTENAS = ['', 'cento','duzentos','trezentos','quatrocentos','quinhentos','seiscentos','setecentos','oitocentos','novecentos'];
+
+function tresDigitos(n){
+  if (n === 0) return '';
+  if (n === 100) return 'cem';
+  const c = Math.floor(n/100), r = n % 100;
+  const parts = [];
+  if (c > 0) parts.push(CENTENAS[c]);
+  if (r > 0){
+    if (r < 10) parts.push(UNI[r]);
+    else if (r < 20) parts.push(DEZ19[r-10]);
+    else {
+      const d = Math.floor(r/10), u = r % 10;
+      parts.push(u > 0 ? DEZENAS[d] + ' e ' + UNI[u] : DEZENAS[d]);
+    }
+  }
+  return parts.join(' e ');
+}
+
+function numeroPorExtenso(valor){
+  valor = Math.round(valor*100)/100;
+  const inteiro = Math.floor(valor + 1e-9);
+  const centavos = Math.round((valor - inteiro) * 100);
+
+  const milhoes = Math.floor(inteiro/1000000);
+  const resto = inteiro % 1000000;
+  const milhares = Math.floor(resto/1000);
+  const cent = resto % 1000;
+
+  const grupos = [];
+  if (milhoes > 0) grupos.push(tresDigitos(milhoes) + (milhoes === 1 ? ' milhão' : ' milhões'));
+  if (milhares > 0) grupos.push(milhares === 1 ? 'mil' : tresDigitos(milhares) + ' mil');
+  if (cent > 0 || grupos.length === 0) grupos.push(tresDigitos(cent) || 'zero');
+
+  let textoInteiro;
+  if (grupos.length === 1) textoInteiro = grupos[0];
+  else textoInteiro = grupos.slice(0,-1).join(', ') + ' e ' + grupos[grupos.length-1];
+
+  const moedaSing = cfg.moedaSing || 'unidade';
+  const moedaPlur = cfg.moedaPlur || 'unidades';
+  const subSing = cfg.subSing || 'centavo';
+  const subPlur = cfg.subPlur || 'centavos';
+
+  let out = textoInteiro + ' ' + (inteiro === 1 ? moedaSing : moedaPlur);
+  if (centavos > 0){
+    out += ' e ' + tresDigitos(centavos) + ' ' + (centavos === 1 ? subSing : subPlur);
+  }
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
+/* ---------- ligação / configuração ---------- */
+const SUPABASE_URL = 'https://lsjaulihgeqlngddgili.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_i026FDqJLh6kTTSTvz73Jw_iAoZIzK6';
+
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = JSON.parse(localStorage.getItem('cfg') || 'null') || {};
+  cfg = {
+    titular: saved.titular || '',
+    conta: saved.conta || '',
+    localEmissao: saved.localEmissao || 'Praia',
+    moedaSing: saved.moedaSing || 'escudo',
+    moedaPlur: saved.moedaPlur || 'escudos',
+    subSing: saved.subSing || 'centavo',
+    subPlur: saved.subPlur || 'centavos',
+  };
+  document.getElementById('cfg-titular').value = cfg.titular;
+  document.getElementById('cfg-conta').value = cfg.conta;
+  document.getElementById('cfg-local-emissao').value = cfg.localEmissao;
+  document.getElementById('cfg-moeda-sing').value = cfg.moedaSing;
+  document.getElementById('cfg-moeda-plur').value = cfg.moedaPlur;
+  document.getElementById('cfg-sub-sing').value = cfg.subSing;
+  document.getElementById('cfg-sub-plur').value = cfg.subPlur;
+
+  document.getElementById('si-data').value = hoje();
+  document.getElementById('mov-data').value = hoje();
+  document.getElementById('ch-data').value = hoje();
+  document.getElementById('pm-data').value = hoje();
+  document.getElementById('nif').addEventListener('keydown', e => { if (e.key === 'Enter') procurarPessoa(); });
+  ['login-email', 'login-pass'].forEach(id =>
+    document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); }));
+
+  ligar();
+});
+
+function guardarDefinicoes(){
+  cfg = {
+    ...cfg,
+    titular: document.getElementById('cfg-titular').value.trim(),
+    conta: document.getElementById('cfg-conta').value.trim(),
+    localEmissao: document.getElementById('cfg-local-emissao').value.trim() || 'Praia',
+    moedaSing: document.getElementById('cfg-moeda-sing').value.trim() || 'escudo',
+    moedaPlur: document.getElementById('cfg-moeda-plur').value.trim() || 'escudos',
+    subSing: document.getElementById('cfg-sub-sing').value.trim() || 'centavo',
+    subPlur: document.getElementById('cfg-sub-plur').value.trim() || 'centavos',
+  };
+  localStorage.setItem('cfg', JSON.stringify(cfg));
+  log('Definições guardadas.');
+}
+
+function ligar(){
+  try{
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    setStatus(true);
+    verificarSessao();
+  }catch(e){
+    setStatus(false);
+    log('Erro ao ligar: ' + e.message, true);
+  }
+}
+function requireConn(){
+  if (!sb){ log('A aplicação ainda não ligou ao Supabase — tenta recarregar a página.', true); return false; }
+  if (!meuPapel){ log('Inicia sessão primeiro.', true); return false; }
+  return true;
+}
+function requireGestao(){
+  if (!requireConn()) return false;
+  if (meuPapel !== 'gestao'){ log('Só um utilizador de gestão pode fazer isto.', true); return false; }
+  return true;
+}
+
+/* ---------- AUTENTICAÇÃO ---------- */
+async function verificarSessao(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && session.user){
+    await entrarComSessao(session.user);
+  } else {
+    document.getElementById('login-panel').style.display = 'block';
+    document.getElementById('app-content').style.display = 'none';
+  }
+}
+
+async function entrar(){
+  if (!sb){ log('A aplicação ainda não ligou ao Supabase — tenta recarregar a página.', true); return; }
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const logEl = document.getElementById('login-log');
+  if (!email || !password){ logEl.textContent = 'Indica email e palavra-passe.'; return; }
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error){ logEl.textContent = 'Erro ao entrar: ' + error.message; return; }
+  logEl.textContent = '';
+  await entrarComSessao(data.user);
+}
+
+async function entrarComSessao(user){
+  // garante que existe um perfil para este utilizador (papel 'consulta' por omissão)
+  let { data: perfil, error } = await sb.from('perfis').select('*').eq('user_id', user.id).maybeSingle();
+  if (!perfil && !error){
+    const ins = await sb.from('perfis').insert({ user_id: user.id, email: user.email }).select().single();
+    perfil = ins.data;
+  }
+  meuPapel = perfil ? perfil.papel : 'consulta';
+
+  document.getElementById('login-panel').style.display = 'none';
+  document.getElementById('app-content').style.display = 'block';
+  document.getElementById('user-bar').style.display = 'inline';
+  document.getElementById('user-email').textContent = user.email;
+  document.getElementById('user-avatar').textContent = (user.email || '?')[0].toUpperCase();
+  document.getElementById('user-papel').textContent = meuPapel === 'gestao' ? 'gestão' : 'consulta';
+  document.getElementById('conta-email').textContent = user.email;
+
+  aplicarPermissoes();
+  carregarTodosEmprestimos();
+}
+
+async function sair(){
+  await sb.auth.signOut();
+  meuPapel = null;
+  document.getElementById('user-bar').style.display = 'none';
+  document.getElementById('login-panel').style.display = 'block';
+  document.getElementById('app-content').style.display = 'none';
+}
+
+function aplicarPermissoes(){
+  const podeGerir = meuPapel === 'gestao';
+  document.querySelectorAll('.gestao-only').forEach(el => {
+    el.classList.toggle('hidden-by-role', !podeGerir);
+  });
+}
+
+/* ---------- UTILIZADORES (só gestão) ---------- */
+async function carregarUtilizadores(){
+  if (!requireConn()) return;
+  const { data, error } = await sb.from('perfis').select('*').order('email');
+  if (error){ log('Erro: ' + error.message, true); return; }
+  const tbody = document.getElementById('utilizadores-body');
+  tbody.innerHTML = '';
+  data.forEach(p => {
+    const tr = document.createElement('tr');
+    const outroPapel = p.papel === 'gestao' ? 'consulta' : 'gestao';
+    const rotulo = outroPapel === 'gestao' ? 'Tornar gestão' : 'Tornar consulta';
+    tr.innerHTML = `<td>${p.email || p.user_id}</td><td><span class="badge ${p.papel === 'gestao' ? 'ativo' : 'pendente'}">${p.papel}</span></td><td><button class="small ghost" onclick="mudarPapel('${p.user_id}','${outroPapel}')">${rotulo}</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function mudarPapel(userId, novoPapel){
+  if (!requireGestao()) return;
+  if (!await confirmar('Alterar perfil?', 'O utilizador passa a ter o perfil "' + (novoPapel === 'gestao' ? 'gestão' : 'consulta') + '".', 'Alterar', novoPapel === 'consulta')) return;
+  const { error } = await sb.from('perfis').update({ papel: novoPapel }).eq('user_id', userId);
+  if (error){ log('Erro: ' + error.message, true); return; }
+  log('Papel atualizado.');
+  carregarUtilizadores();
+}
+
+async function criarUtilizador(){
+  if (!requireGestao()) return;
+  const email = document.getElementById('nu-email').value.trim();
+  const password = document.getElementById('nu-pass').value;
+  const papel = document.getElementById('nu-papel').value;
+  if (!email || !password){ log('Indica o email e a palavra-passe.', true); return; }
+  if (password.length < 6){ log('A palavra-passe deve ter pelo menos 6 caracteres.', true); return; }
+
+  const { data, error } = await sb.functions.invoke('admin-create-user', {
+    body: { email, password, papel }
+  });
+  if (error){ log('Erro ao criar utilizador: ' + (error.message || 'falha na função admin-create-user'), true); return; }
+  if (data && data.error){ log('Erro ao criar utilizador: ' + data.error, true); return; }
+
+  log('Utilizador criado com sucesso.');
+  document.getElementById('nu-email').value = '';
+  document.getElementById('nu-pass').value = '';
+  document.getElementById('nu-papel').value = 'consulta';
+  carregarUtilizadores();
+}
+
+async function alterarPassword(){
+  if (!requireConn()) return;
+  const p1 = document.getElementById('np-pass1').value;
+  const p2 = document.getElementById('np-pass2').value;
+  if (!p1 || p1.length < 6){ log('A nova palavra-passe deve ter pelo menos 6 caracteres.', true); return; }
+  if (p1 !== p2){ log('As duas palavras-passe não coincidem.', true); return; }
+
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error){ log('Erro ao alterar palavra-passe: ' + error.message, true); return; }
+
+  log('Palavra-passe alterada com sucesso.');
+  document.getElementById('np-pass1').value = '';
+  document.getElementById('np-pass2').value = '';
+}
+
+/* ---------- pessoas / empréstimos (como antes) ---------- */
+async function procurarPessoa(){
+  if (!requireConn()) return;
+  const nif = document.getElementById('nif').value.trim();
+  if (!nif){ log('Indica um NIF.', true); return; }
+
+  const { data, error } = await sb.from('pessoas').select('*').eq('nif', nif).maybeSingle();
+  if (error){ log('Erro: ' + error.message, true); return; }
+
+  document.getElementById('criar-pessoa').style.display = 'none';
+  document.getElementById('pessoa-card').style.display = 'none';
+  document.getElementById('novo-emp-panel').style.display = 'none';
+  document.getElementById('lista-panel').style.display = 'none';
+  document.getElementById('mapa-section').style.display = 'none';
+
+  if (!data){
+    pessoaAtual = null;
+    document.getElementById('criar-pessoa').style.display = 'block';
+    log('NIF não encontrado — podes registar a pessoa.');
+    return;
+  }
+  pessoaAtual = data;
+  mostrarPessoaCard(data);
+  document.getElementById('editar-pessoa').style.display = 'none';
+  document.getElementById('novo-emp-panel').style.display = 'block';
+  document.getElementById('lista-panel').style.display = 'block';
+  log('Pessoa encontrada.');
+  carregarEmprestimos(nif);
+}
+
+function mostrarPessoaCard(data){
+  document.getElementById('pessoa-nome').textContent = data.nome;
+  setAvatar(data.nome);
+  document.getElementById('pessoa-nif-txt').textContent = 'NIF ' + data.nif;
+  document.getElementById('pessoa-limite-txt').textContent = data.limite_credito ? 'Limite de crédito: ' + fmt(data.limite_credito) : 'Sem limite de crédito definido';
+  document.getElementById('pessoa-card').style.display = 'block';
+}
+
+let pesqNomeTimeout = null;
+function pesquisarPorNome(){
+  clearTimeout(pesqNomeTimeout);
+  const termo = document.getElementById('pesq-nome').value.trim();
+  const box = document.getElementById('pesq-nome-resultados');
+  if (termo.length < 2){ box.innerHTML = ''; return; }
+  pesqNomeTimeout = setTimeout(async () => {
+    if (!sb) return;
+    const { data, error } = await sb.from('pessoas').select('nif, nome').ilike('nome', '%' + termo + '%').limit(8);
+    if (error || !data || !data.length){ box.innerHTML = '<div class="empty">Sem resultados.</div>'; return; }
+    box.innerHTML = '';
+    data.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'side-link';
+      item.style.border = '1px solid var(--line)';
+      item.style.marginTop = '4px';
+      item.textContent = p.nome + ' — ' + p.nif;
+      item.onclick = () => {
+        document.getElementById('nif').value = p.nif;
+        document.getElementById('pesq-nome').value = '';
+        box.innerHTML = '';
+        procurarPessoa();
+      };
+      box.appendChild(item);
+    });
+  }, 300);
+}
+
+async function criarPessoa(){
+  if (!requireGestao()) return;
+  const nif = document.getElementById('nif').value.trim();
+  const nome = document.getElementById('novo-nome').value.trim();
+  const contacto = document.getElementById('novo-contacto').value.trim();
+  const limiteRaw = document.getElementById('novo-limite').value;
+  const limite = limiteRaw === '' ? null : parseFloat(limiteRaw);
+  if (!nome){ log('Indica o nome.', true); return; }
+
+  const { data, error } = await sb.from('pessoas').insert({ nif, nome, contacto: contacto || null, limite_credito: limite }).select().single();
+  if (error){ log('Erro ao registar: ' + error.message, true); return; }
+
+  pessoaAtual = data;
+  document.getElementById('criar-pessoa').style.display = 'none';
+  mostrarPessoaCard(data);
+  document.getElementById('novo-emp-panel').style.display = 'block';
+  document.getElementById('lista-panel').style.display = 'block';
+  log('Pessoa registada.');
+  carregarEmprestimos(nif);
+  document.getElementById('novo-nome').value = '';
+  document.getElementById('novo-contacto').value = '';
+  document.getElementById('novo-limite').value = '';
+}
+
+function mostrarEditarPessoa(){
+  if (!pessoaAtual) return;
+  document.getElementById('edit-nome').value = pessoaAtual.nome || '';
+  document.getElementById('edit-contacto').value = pessoaAtual.contacto || '';
+  document.getElementById('edit-limite').value = pessoaAtual.limite_credito != null ? pessoaAtual.limite_credito : '';
+  document.getElementById('editar-pessoa').style.display = 'block';
+}
+
+async function guardarEdicaoPessoa(){
+  if (!requireGestao() || !pessoaAtual) return;
+  const nome = document.getElementById('edit-nome').value.trim();
+  const contacto = document.getElementById('edit-contacto').value.trim();
+  const limiteRaw = document.getElementById('edit-limite').value;
+  const limite = limiteRaw === '' ? null : parseFloat(limiteRaw);
+  if (!nome){ log('Indica o nome.', true); return; }
+
+  const { data, error } = await sb.from('pessoas')
+    .update({ nome, contacto: contacto || null, limite_credito: limite })
+    .eq('nif', pessoaAtual.nif).select().single();
+  if (error){ log('Erro ao guardar: ' + error.message, true); return; }
+
+  pessoaAtual = data;
+  mostrarPessoaCard(data);
+  document.getElementById('editar-pessoa').style.display = 'none';
+  log('Pessoa atualizada.');
+}
+
+function estadoFinalEmprestimo(emp, linhas){
+  if (emp.estado === 'ANULADO') return 'ANULADO';
+  if (emp.estado === 'LIQUIDADO') return 'LIQUIDADO';
+  return estadoEmprestimoPorPrestacoes(linhas);
+}
+function badgeClasseEmprestimo(estado){
+  if (estado === 'ANULADO') return 'anulado';
+  if (estado === 'LIQUIDADO') return 'liquidado';
+  return badgeClassePrestacao(estado);
+}
+
+async function carregarTodosEmprestimos(){
+  if (!requireConn()) return;
+  const { data, error } = await sb.from('emprestimos')
+    .select('*, pessoas(nome)')
+    .order('data_inicio', { ascending: false });
+  if (error){ log('Erro: ' + error.message, true); return; }
+
+  const { data: prest, error: errPrest } = await sb.from('mapa_amortizacao')
+    .select('emprestimo_id, estado, valor_prestacao, data_vencimento');
+
+  // agrupa as prestações por empréstimo, para saber o estado real de cada um
+  const porEmprestimo = new Map();
+  let pagas = 0, atrasadas = 0, porPagar = 0;
+  if (!errPrest){
+    prest.forEach(p => {
+      if (!porEmprestimo.has(p.emprestimo_id)) porEmprestimo.set(p.emprestimo_id, []);
+      porEmprestimo.get(p.emprestimo_id).push(p);
+      const e = estadoPrestacao(p);
+      if (e === 'PAGO') pagas++;
+      else if (e === 'ATRASADO') atrasadas++; else porPagar++;
+    });
+  }
+
+  const totalConcedido = data.reduce((s, e) => s + Number(e.valor_emprestimo), 0);
+  document.getElementById('kpi-todos-n').textContent = data.length;
+  document.getElementById('kpi-todos-total').textContent = fmt(totalConcedido);
+  document.getElementById('kpi-todos-pagas').textContent = pagas;
+  document.getElementById('kpi-todos-atrasadas').textContent = atrasadas;
+  document.getElementById('kpi-todos-porpagar').textContent = porPagar;
+
+  ultimoTodosEmprestimos = data;
+  ultimoPorEmprestimo = porEmprestimo;
+  aplicarFiltrosLista();
+}
+
+function aplicarFiltrosLista(){
+  const data = ultimoTodosEmprestimos;
+  const porEmprestimo = ultimoPorEmprestimo;
+  const fEstado = document.getElementById('filtro-estado').value;
+  const fDe = document.getElementById('filtro-data-de').value;
+  const fAte = document.getElementById('filtro-data-ate').value;
+
+  const filtrados = data.filter(emp => {
+    if (fDe && emp.data_inicio < fDe) return false;
+    if (fAte && emp.data_inicio > fAte) return false;
+    if (fEstado){
+      const estadoReal = estadoFinalEmprestimo(emp, porEmprestimo.get(emp.id) || []);
+      if (estadoReal !== fEstado) return false;
+    }
+    return true;
+  });
+
+  const tbody = document.querySelector('#tabela-todos-emprestimos tbody');
+  tbody.innerHTML = '';
+  document.getElementById('todos-emprestimos-vazio').style.display = filtrados.length ? 'none' : 'block';
+
+  filtrados.forEach(emp => {
+    const tr = document.createElement('tr');
+    tr.className = 'loan-row';
+    tr.onclick = () => {
+      document.getElementById('nif').value = emp.nif;
+      mudarVista('emprestimos');
+      procurarPessoa().then(() => verMapa(emp));
+    };
+    const nome = emp.pessoas ? emp.pessoas.nome : '';
+    const estadoReal = estadoFinalEmprestimo(emp, porEmprestimo.get(emp.id) || []);
+    tr.innerHTML = `<td>${emp.nif}</td><td>${nome}</td><td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td><span class="badge ${badgeClasseEmprestimo(estadoReal)}">${estadoReal}</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function limparFiltrosLista(){
+  document.getElementById('filtro-estado').value = '';
+  document.getElementById('filtro-data-de').value = '';
+  document.getElementById('filtro-data-ate').value = '';
+  aplicarFiltrosLista();
+}
+
+async function carregarEmprestimos(nif){
+  const { data, error } = await sb.from('emprestimos').select('*').eq('nif', nif).order('data_inicio', {ascending:false});
+  if (error){ log('Erro: ' + error.message, true); return; }
+  const totalEmp = data.reduce((s, e) => s + Number(e.valor_emprestimo), 0);
+  const taxaMedia = data.length ? data.reduce((s, e) => s + Number(e.taxa_juro_anual), 0) / data.length : 0;
+  document.getElementById('kpi-emp-n').textContent = data.length;
+  document.getElementById('kpi-emp-total').textContent = fmt(totalEmp);
+  document.getElementById('kpi-emp-taxa').textContent = fmt(taxaMedia) + '%';
+
+  const ids = data.map(e => e.id);
+  const porEmprestimo = new Map();
+  if (ids.length){
+    const { data: prest } = await sb.from('mapa_amortizacao').select('emprestimo_id, estado, data_vencimento').in('emprestimo_id', ids);
+    (prest || []).forEach(p => {
+      if (!porEmprestimo.has(p.emprestimo_id)) porEmprestimo.set(p.emprestimo_id, []);
+      porEmprestimo.get(p.emprestimo_id).push(p);
+    });
+  }
+
+  const tbody = document.querySelector('#tabela-emprestimos tbody');
+  tbody.innerHTML = '';
+  document.getElementById('lista-vazia').style.display = data.length ? 'none' : 'block';
+  data.forEach(emp => {
+    const tr = document.createElement('tr');
+    tr.className = 'loan-row';
+    tr.dataset.id = emp.id;
+    tr.onclick = () => verMapa(emp);
+    const estadoReal = estadoFinalEmprestimo(emp, porEmprestimo.get(emp.id) || []);
+    tr.innerHTML = `<td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td><span class="badge ${badgeClasseEmprestimo(estadoReal)}">${estadoReal}</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function gerarLinhasMapa(valor, taxaAnual, nPrestacoes, dataInicioStr, periodicidade){
+  const divisor = periodicidade === 'TRIMESTRAL' ? 4 : (periodicidade === 'ANUAL' ? 1 : 12);
+  const taxaPeriodica = (taxaAnual / 100) / divisor;
+  let prestacaoFixa = taxaPeriodica === 0 ? valor / nPrestacoes : valor * taxaPeriodica / (1 - Math.pow(1 + taxaPeriodica, -nPrestacoes));
+  const linhas = [];
+  let saldo = valor;
+  const dataInicio = new Date(dataInicioStr + 'T00:00:00');
+  for (let i = 1; i <= nPrestacoes; i++){
+    let juro = Math.round(saldo * taxaPeriodica * 100) / 100;
+    let capital = Math.round((prestacaoFixa - juro) * 100) / 100;
+    let prestacao = prestacaoFixa;
+    if (i === nPrestacoes){ capital = saldo; prestacao = Math.round((capital + juro) * 100) / 100; }
+    saldo = Math.round((saldo - capital) * 100) / 100;
+    const venc = new Date(dataInicio);
+    if (periodicidade === 'TRIMESTRAL') venc.setMonth(venc.getMonth() + i*3);
+    else if (periodicidade === 'ANUAL') venc.setFullYear(venc.getFullYear() + i);
+    else venc.setMonth(venc.getMonth() + i);
+    linhas.push({ numero_prestacao:i, data_vencimento:venc.toISOString().slice(0,10), valor_prestacao:prestacao, valor_juro:juro, valor_capital:capital, capital_em_divida:saldo, estado:'PENDENTE' });
+  }
+  return linhas;
+}
+
+function limparSimulacao(){
+  ['sim-valor','sim-taxa','sim-prestacoes','sim-data'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('sim-periodicidade').value = 'MENSAL';
+  document.getElementById('sim-body').innerHTML = '';
+  ['sim-prestacao-fixa','sim-total-pagar','sim-total-juros'].forEach(id => { document.getElementById(id).textContent = '0,00'; });
+  document.getElementById('sim-resultado').style.display = 'none';
+}
+function simular(){
+  const valor = parseFloat(document.getElementById('sim-valor').value);
+  const taxa = parseFloat(document.getElementById('sim-taxa').value);
+  const nPrestacoes = parseInt(document.getElementById('sim-prestacoes').value, 10);
+  const periodicidade = document.getElementById('sim-periodicidade').value;
+  const dataInicio = document.getElementById('sim-data').value || hoje();
+  if (!valor || !nPrestacoes || isNaN(taxa)){ log('Preenche valor, taxa e nº de prestações.', true); return; }
+
+  const linhas = gerarLinhasMapa(valor, taxa, nPrestacoes, dataInicio, periodicidade);
+  const totalPagar = linhas.reduce((s, l) => s + l.valor_prestacao, 0);
+  const totalJuros = linhas.reduce((s, l) => s + l.valor_juro, 0);
+
+  document.getElementById('sim-resultado').style.display = 'block';
+  document.getElementById('sim-prestacao-fixa').textContent = fmt(linhas[0].valor_prestacao);
+  document.getElementById('sim-total-pagar').textContent = fmt(totalPagar);
+  document.getElementById('sim-total-juros').textContent = fmt(totalJuros);
+
+  const tbody = document.getElementById('sim-body');
+  tbody.innerHTML = '';
+  linhas.forEach(l => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${l.numero_prestacao}</td><td>${l.data_vencimento}</td><td class="num">${fmt(l.valor_prestacao)}</td><td class="num">${fmt(l.valor_juro)}</td><td class="num">${fmt(l.valor_capital)}</td><td class="num">${fmt(l.capital_em_divida)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // deixa os valores prontos para, se for o caso, criar o empréstimo a sério
+  document.getElementById('valor').value = valor;
+  document.getElementById('taxa').value = taxa;
+  document.getElementById('prestacoes').value = nPrestacoes;
+  document.getElementById('periodicidade').value = periodicidade;
+  document.getElementById('data-inicio').value = dataInicio;
+  fmCloseAll();
+}
+
+async function carregarResumoMensal(){
+  if (!requireConn()) return;
+  const { data: emprestimos } = await sb.from('emprestimos').select('data_inicio, valor_emprestimo');
+  const { data: prestacoes } = await sb.from('mapa_amortizacao').select('*');
+
+  const meses = new Map(); // 'YYYY-MM' -> { emprestado, recebido }
+  const mesDe = s => (s || '').slice(0, 7);
+
+  (emprestimos || []).forEach(e => {
+    const m = mesDe(e.data_inicio);
+    if (!m) return;
+    if (!meses.has(m)) meses.set(m, { emprestado: 0, recebido: 0 });
+    meses.get(m).emprestado += Number(e.valor_emprestimo);
+  });
+  (prestacoes || []).forEach(p => {
+    const v = valorPagoPrestacao(p);
+    if (v <= 0.004) return;
+    const m = mesDe(p.data_pagamento);
+    if (!m) return;
+    if (!meses.has(m)) meses.set(m, { emprestado: 0, recebido: 0 });
+    meses.get(m).recebido += v;
+  });
+
+  const ordenados = [...meses.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  const maxValor = ordenados.reduce((m, [, v]) => Math.max(m, v.emprestado, v.recebido), 0) || 1;
+
+  const tbody = document.getElementById('resumo-body');
+  tbody.innerHTML = '';
+  document.getElementById('resumo-vazio').style.display = ordenados.length ? 'none' : 'block';
+
+  ordenados.forEach(([mes, v]) => {
+    const tr = document.createElement('tr');
+    const pctEmp = Math.round(v.emprestado * 100 / maxValor);
+    const pctRec = Math.round(v.recebido * 100 / maxValor);
+    tr.innerHTML = `<td>${mes}</td><td class="num">${fmt(v.emprestado)}</td><td class="num">${fmt(v.recebido)}</td>
+      <td><div class="progress" style="height:8px;"><i style="width:${pctEmp}%;background:var(--accent-2);"></i></div></td>
+      <td><div class="progress" style="height:8px;"><i style="width:${pctRec}%;"></i></div></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function criarEmprestimo(){
+  if (!requireGestao()) return;
+  if (!pessoaAtual){ log('Procura ou regista uma pessoa primeiro.', true); return; }
+  const valor = parseFloat(document.getElementById('valor').value);
+  const taxa = parseFloat(document.getElementById('taxa').value);
+  const nPrestacoes = parseInt(document.getElementById('prestacoes').value, 10);
+  const periodicidade = document.getElementById('periodicidade').value;
+  const dataInicio = document.getElementById('data-inicio').value;
+  if (!valor || !nPrestacoes || !dataInicio || isNaN(taxa)){ log('Preenche valor, taxa, prestações e data de início.', true); return; }
+
+  if (pessoaAtual.limite_credito != null){
+    const { data: ativos } = await sb.from('emprestimos').select('valor_emprestimo').eq('nif', pessoaAtual.nif).not('estado', 'in', '(LIQUIDADO,ANULADO)');
+    const exposicaoAtual = (ativos || []).reduce((s, e) => s + Number(e.valor_emprestimo), 0);
+    const novoTotal = exposicaoAtual + valor;
+    if (novoTotal > pessoaAtual.limite_credito){
+      const ok = await confirmar('Ultrapassa o limite de crédito',
+        pessoaAtual.nome + ' tem um limite de ' + fmt(pessoaAtual.limite_credito) + '. Exposição atual: ' + fmt(exposicaoAtual) + '. Com este empréstimo passaria a ' + fmt(novoTotal) + '. Continuar mesmo assim?',
+        'Criar na mesma', true);
+      if (!ok) return;
+    }
+  }
+
+  const { data: emp, error: errEmp } = await sb.from('emprestimos').insert({
+    nif: pessoaAtual.nif, valor_emprestimo: valor, taxa_juro_anual: taxa,
+    numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio
+  }).select().single();
+  if (errEmp){ log('Erro ao criar empréstimo: ' + errEmp.message, true); return; }
+
+  const linhas = gerarLinhasMapa(valor, taxa, nPrestacoes, dataInicio, periodicidade).map(l => ({...l, emprestimo_id: emp.id}));
+  const { error: errMapa } = await sb.from('mapa_amortizacao').insert(linhas);
+  if (errMapa){ log('Empréstimo criado, mas falhou o mapa: ' + errMapa.message, true); return; }
+
+  log('Empréstimo criado e mapa gerado (' + nPrestacoes + ' prestações).');
+  carregarEmprestimos(pessoaAtual.nif);
+  verMapa(emp);
+
+  document.getElementById('valor').value = '';
+  document.getElementById('taxa').value = '';
+  document.getElementById('prestacoes').value = '';
+  document.getElementById('data-inicio').value = '';
+
+  // pré-preenche o cheque de desembolso deste empréstimo, pronto a emitir
+  document.getElementById('ch-beneficiario').value = pessoaAtual.nome;
+  document.getElementById('ch-valor').value = valor;
+  document.getElementById('ch-data').value = dataInicio;
+  document.getElementById('ch-motivo').value = 'Desembolso do empréstimo concedido a ' + pessoaAtual.nome;
+  document.getElementById('ch-numero').value = '';
+  mudarVista('cheques');
+  document.getElementById('ch-numero').focus();
+  toast('Empréstimo criado — confirma o nº do cheque e emite para lançar a saída no banco.', 'ok');
+}
+
+/* ---------- IMPORTAR EMPRÉSTIMOS EXISTENTES (uma linha por empréstimo) ---------- */
+const COLS_MODELO_EMPRESTIMOS = [
+  'NIF', 'Nome', 'Data Início', 'Valor Empréstimo', 'Taxa Juro Anual (%)',
+  'Nº Prestações', 'Periodicidade', 'Valor Pago'
+];
+
+function exportarModeloEmprestimos(){
+  const exemplo = {
+    'NIF': '123456789', 'Nome': 'João Silva', 'Data Início': '2025-01-10',
+    'Valor Empréstimo': 10000, 'Taxa Juro Anual (%)': 12.5, 'Nº Prestações': 24,
+    'Periodicidade': 'MENSAL', 'Valor Pago': 2500
+  };
+  const ws = XLSX.utils.json_to_sheet([exemplo], { header: COLS_MODELO_EMPRESTIMOS });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Empréstimos');
+  XLSX.writeFile(wb, 'modelo_importacao_emprestimos.xlsx');
+}
+
+function parseNumeroPT(v){
+  if (v === null || v === undefined) return NaN;
+  let s = v.toString().trim();
+  if (!s) return NaN;
+  s = s.replace(/[^\d,.\-]/g, '');
+  const temVirgula = s.includes(','), temPonto = s.includes('.');
+  if (temVirgula && temPonto) s = s.replace(/\./g, '').replace(',', '.');
+  else if (temVirgula) s = s.replace(',', '.');
+  return parseFloat(s);
+}
+
+/* ---- leitura tolerante do Excel (cabeçalhos, números e datas) ---- */
+function normCab(s){
+  return (s === null || s === undefined ? '' : s).toString().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function numeroCelula(v){
+  if (typeof v === 'number') return v;
+  if (v === null || v === undefined || v instanceof Date) return NaN;
+  let s = v.toString().trim();
+  if (!s) return NaN;
+  s = s.replace(/\s|cve|ecv|€|%/gi, '');
+  s = s.replace(/\$(\d{1,2})$/, ',$1').replace(/\$/g, '');          // 10.000$00 -> 10.000,00
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');       // 2.500 -> 2500
+  return parseNumeroPT(s);
+}
+function dataCelula(v){
+  const p2 = n => String(n).padStart(2, '0');
+  if (v instanceof Date && !isNaN(v)){
+    const d = new Date(v.getTime() + 12*3600*1000);
+    return d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate());
+  }
+  if (typeof v === 'number' && v > 20000 && v < 80000){
+    return new Date(Math.round((v - 25569) * 86400 * 1000)).toISOString().slice(0, 10);
+  }
+  const s = (v === null || v === undefined ? '' : v).toString().trim();
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+  if (m) return m[1] + '-' + p2(m[2]) + '-' + p2(m[3]);
+  m = s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/);
+  if (m) return (m[3].length === 2 ? '20' + m[3] : m[3]) + '-' + p2(m[2]) + '-' + p2(m[1]);
+  return '';
+}
+
+async function importarEmprestimosExistentes(){
+  if (!requireGestao()) return;
+  const fileInput = document.getElementById('ie-file');
+  const file = fileInput.files[0];
+  const logEl = document.getElementById('import-emp-log');
+  if (!file){ logEl.textContent = 'Escolhe um ficheiro primeiro.'; return; }
+  if (!await confirmar('Importar empréstimos?', 'Vai criar pessoas e empréstimos a partir do ficheiro. O mapa de amortização é gerado automaticamente e o "Valor Pago" é distribuído pelas primeiras prestações.', 'Importar')) return;
+
+  logEl.style.whiteSpace = 'pre-line';
+  logEl.textContent = 'A ler ficheiro...';
+  let wb;
+  try {
+    wb = XLSX.read(await file.arrayBuffer(), { type:'array', cellDates:true });
+  } catch (e){ logEl.textContent = 'Não foi possível ler o ficheiro: ' + e.message; return; }
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const m = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'' });
+  const linha0 = sheet['!ref'] ? XLSX.utils.decode_range(sheet['!ref']).s.r : 0;
+
+  // linha de cabeçalho = a que tem a coluna NIF (aceita linhas de título por cima)
+  const hRow = m.findIndex(r => r.some(c => normCab(c) === 'nif'));
+  if (hRow < 0){ logEl.textContent = 'Não encontrei a coluna "NIF" no ficheiro. Usa o modelo Excel.'; return; }
+  const cab = m[hRow].map(normCab);
+  const achar = (...res) => { for (const re of res){ const i = cab.findIndex(c => c && re.test(c)); if (i >= 0) return i; } return -1; };
+  const col = {
+    nif: achar(/^nif$/),
+    nome: achar(/^nome/, /cliente/),
+    data: achar(/data.*inicio/, /^inicio$/, /^data$/),
+    valor: achar(/valor.*emprest/, /^valor$/, /^capital$/, /montante/),
+    taxa: achar(/taxa/, /juro/),
+    n: achar(/^n .*prest/, /prestacoes$/, /prest/),
+    per: achar(/period/),
+    pago: achar(/valor.*pago/, /total.*pago/, /^pago$/, /pago/)
+  };
+  const emFalta = [['nif','NIF'],['data','Data Início'],['valor','Valor Empréstimo'],['taxa','Taxa Juro Anual (%)'],['n','Nº Prestações']]
+    .filter(([k]) => col[k] < 0).map(([, nome]) => nome);
+  if (emFalta.length){ logEl.textContent = 'Faltam colunas no ficheiro: ' + emFalta.join(', ') + '. Usa o modelo Excel.'; return; }
+
+  let empOk = 0, prestOk = 0, pagasOk = 0;
+  const erros = [];
+  let ultimoNif = '', ultimoNome = '';
+
+  for (let i = hRow + 1; i < m.length; i++){
+    const r = m[i];
+    if (!r.some(c => c !== '' && c !== null && c !== undefined)) continue;   // linha vazia
+    const lin = i + 1;
+    logEl.textContent = 'A importar linha ' + lin + ' de ' + m.length + '...';
+    try {
+      let nif = String(r[col.nif] ?? '').trim();
+      let nome = col.nome >= 0 ? String(r[col.nome] ?? '').trim() : '';
+      const dataInicio = dataCelula(r[col.data]);
+      const valor = numeroCelula(r[col.valor]);
+      let taxa = numeroCelula(r[col.taxa]);
+      const celTaxa = sheet[XLSX.utils.encode_cell({ r: linha0 + i, c: col.taxa })];
+      if (celTaxa && typeof celTaxa.v === 'number' && /%/.test(celTaxa.w || '')) taxa = celTaxa.v * 100;
+      const nPrestacoes = Math.round(numeroCelula(r[col.n]));
+      let periodicidade = col.per >= 0 ? normCab(r[col.per]).toUpperCase() : '';
+      if (!periodicidade) periodicidade = 'MENSAL';
+      let valorPago = col.pago >= 0 ? numeroCelula(r[col.pago]) : 0;
+      if (isNaN(valorPago)) valorPago = 0;
+
+      // NIF/Nome vazios (células fundidas): herda da linha anterior
+      if (!nif && !isNaN(valor) && dataInicio){ nif = ultimoNif; if (!nome) nome = ultimoNome; }
+      if (nif){ ultimoNif = nif; if (nome) ultimoNome = nome; }
+
+      const faltas = [];
+      if (!nif) faltas.push('NIF');
+      if (!dataInicio) faltas.push('Data Início');
+      if (isNaN(valor) || valor <= 0) faltas.push('Valor Empréstimo');
+      if (isNaN(taxa)) faltas.push('Taxa');
+      if (!nPrestacoes || nPrestacoes < 1) faltas.push('Nº Prestações');
+      if (!['MENSAL','TRIMESTRAL','ANUAL'].includes(periodicidade)) faltas.push('Periodicidade');
+      if (faltas.length){ erros.push('Linha ' + lin + ': inválido/em falta → ' + faltas.join(', ')); continue; }
+
+      const rp = await sb.from('pessoas').select('*').eq('nif', nif).maybeSingle();
+      if (rp.error){ erros.push('Linha ' + lin + ': ' + rp.error.message); continue; }
+      let pessoa = rp.data;
+      if (!pessoa){
+        if (!nome){ erros.push('Linha ' + lin + ': o NIF ' + nif + ' é novo e falta o Nome'); continue; }
+        const ins = await sb.from('pessoas').insert({ nif, nome }).select().single();
+        if (ins.error){ erros.push('Linha ' + lin + ': ' + ins.error.message); continue; }
+        pessoa = ins.data;
+      }
+
+      const { data: emp, error: errEmp } = await sb.from('emprestimos').insert({
+        nif, valor_emprestimo: valor, taxa_juro_anual: taxa,
+        numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio
+      }).select().single();
+      if (errEmp){ erros.push('Linha ' + lin + ': ' + errEmp.message); continue; }
+
+      const linhas = gerarLinhasMapa(valor, taxa, nPrestacoes, dataInicio, periodicidade);
+
+      // distribui o valor pago pelas primeiras prestações (sequencialmente)
+      let restante = valorPago, pagasEsteEmp = 0;
+      for (const l of linhas){
+        if (restante + 0.05 >= l.valor_prestacao){
+          l.estado = 'PAGO';
+          l.data_pagamento = l.data_vencimento;
+          restante -= l.valor_prestacao;
+          pagasEsteEmp++;
+        } else break;
+      }
+
+      if (await temColunaValorPago()){
+        if (restante > 0.01){
+          const prox = linhas.find(l => l.estado !== 'PAGO');
+          if (prox){ prox.valor_pago = r2(restante); prox.data_pagamento = prox.data_vencimento; }
+        }
+        linhas.forEach(l => { if (l.valor_pago === undefined) l.valor_pago = l.estado === 'PAGO' ? r2(l.valor_prestacao) : 0; });
+      }
+      const mapaLinhas = linhas.map(l => ({ ...l, emprestimo_id: emp.id }));
+      const { error: errMapa } = await sb.from('mapa_amortizacao').insert(mapaLinhas);
+      if (errMapa){
+        await sb.from('emprestimos').delete().eq('id', emp.id);   // não deixa empréstimo sem mapa
+        erros.push('Linha ' + lin + ': ' + errMapa.message); continue;
+      }
+
+      empOk++;
+      prestOk += mapaLinhas.length;
+      pagasOk += pagasEsteEmp;
+    } catch (e){
+      erros.push('Linha ' + lin + ': ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  let msg = empOk + ' empréstimo(s) importado(s), ' + prestOk + ' prestação(ões) geradas (' + pagasOk + ' já pagas), ' + erros.length + ' com erro.';
+  if (col.pago < 0) msg += '\nAviso: não encontrei a coluna "Valor Pago" — nenhuma prestação foi marcada como paga.';
+  if (erros.length) msg += '\n' + erros.slice(0, 10).join('\n') + (erros.length > 10 ? '\n... e mais ' + (erros.length - 10) + ' erro(s)' : '');
+  logEl.textContent = msg;
+  toast(empOk + ' importado(s), ' + erros.length + ' com erro', erros.length ? 'err' : 'ok');
+  fileInput.value = '';
+}
+
+async function verMapa(emp){
+  emprestimoAtual = emp;
+  const { data, error } = await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', emp.id).order('numero_prestacao');
+  if (error){ log('Erro: ' + error.message, true); return; }
+  document.getElementById('mapa-section').style.display = 'block';
+  document.querySelectorAll('#tabela-emprestimos tr.loan-row').forEach(r => r.classList.toggle('selected', r.dataset.id == emp.id));
+  const pagas = data.filter(r => r.estado === 'PAGO').length;
+  const atrasadas = data.filter(r => estadoPrestacao(r) === 'ATRASADO').length;
+  const pct = data.length ? Math.round(pagas * 100 / data.length) : 0;
+  const proxima = data.find(r => r.estado !== 'PAGO');
+  document.getElementById('mapa-progress-label').textContent = pagas + ' de ' + data.length + ' prestações pagas (' + pct + '%)' + (atrasadas ? ' · ' + atrasadas + ' atrasada(s)' : '');
+  document.getElementById('mapa-divida').textContent = fmt(proxima ? Number(proxima.capital_em_divida) + Number(proxima.valor_capital) : 0);
+  const barra = document.getElementById('mapa-progress-bar');
+  barra.style.width = '0%';
+  setTimeout(() => { barra.style.width = pct + '%'; }, 60);
+  document.getElementById('mapa-sub').textContent = '— empréstimo de ' + fmt(emp.valor_emprestimo) + ' em ' + emp.data_inicio;
+  const tbody = document.getElementById('mapa-body');
+  tbody.innerHTML = '';
+  data.forEach(row => {
+    const tr = document.createElement('tr');
+    const estadoReal = estadoPrestacao(row);
+    if (estadoReal === 'PAGO') tr.classList.add('row-paid');
+    const pagoV = valorPagoPrestacao(row);
+    const falta = faltaPrestacao(row);
+    const podeAgir = meuPapel === 'gestao' && (emp.estado || 'ATIVO') === 'ATIVO';
+    let acoes = '';
+    if (podeAgir){
+      if (estadoReal !== 'PAGO') acoes += `<button class="small ghost" onclick="marcarPago(${row.id})">Marcar pago</button> <button class="small ghost" onclick="pagarParteApp(${row.id})">Pagar parte</button> `;
+      if (pagoV > 0.004) acoes += `<button class="small ghost" onclick="anularPagamento(${row.id})">Anular pagamento</button>`;
+    }
+    const pagoTxt = pagoV > 0.004 ? fmt(pagoV) + (estadoReal !== 'PAGO' ? ` <small style="color:var(--muted)">(faltam ${fmt(falta)})</small>` : '') : '';
+    tr.innerHTML = `<td>${row.numero_prestacao}</td><td>${row.data_vencimento}</td><td class="num">${fmt(row.valor_prestacao)}</td><td class="num">${fmt(row.valor_juro)}</td><td class="num">${fmt(row.valor_capital)}</td><td class="num">${fmt(row.capital_em_divida)}</td><td class="num pago-cell">${pagoTxt}</td><td><span class="badge ${badgeClassePrestacao(estadoReal)}">${estadoReal}</span></td><td>${acoes}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  mapaAtualLinhas = data;
+  const haPagas = data.some(r => r.estado === 'PAGO');
+  const haPendentes = data.some(r => r.estado !== 'PAGO');
+  const estadoEmp = emp.estado || 'ATIVO';
+  document.getElementById('editar-emprestimo').style.display = 'none';
+  document.getElementById('btn-editar-emp').style.display = (estadoEmp === 'ATIVO') ? '' : 'none';
+  document.getElementById('btn-liquidar-emp').style.display = (estadoEmp === 'ATIVO' && haPendentes) ? '' : 'none';
+  document.getElementById('btn-anular-emp').style.display = (estadoEmp !== 'ANULADO') ? '' : 'none';
+}
+
+async function marcarPago(idPrestacao){
+  if (!requireGestao()) return;
+  const { data: row, error: errSel } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
+  if (errSel){ log('Erro: ' + errSel.message, true); return; }
+  const falta = faltaPrestacao(row);
+  if (!await confirmar('Marcar prestação como paga?', 'Vai registar o pagamento de ' + fmt(falta) + ' e lançar a entrada correspondente no banco.', 'Marcar como paga')) return;
+  const res = await aplicarPagamento(row, falta, hoje(), '');
+  if (res.erro){ log(res.erro, true); return; }
+  log('Prestação marcada como paga e movimento registado no banco.');
+  verMapa(emprestimoAtual);
+}
+
+function mostrarEditarEmprestimo(){
+  if (!emprestimoAtual) return;
+  document.getElementById('edit-emp-valor').value = emprestimoAtual.valor_emprestimo;
+  document.getElementById('edit-emp-taxa').value = emprestimoAtual.taxa_juro_anual;
+  document.getElementById('edit-emp-prestacoes').value = emprestimoAtual.numero_prestacoes;
+  document.getElementById('edit-emp-periodicidade').value = emprestimoAtual.periodicidade;
+  document.getElementById('edit-emp-data').value = emprestimoAtual.data_inicio;
+  document.getElementById('editar-emprestimo').style.display = 'block';
+}
+
+async function guardarEdicaoEmprestimo(){
+  if (!requireGestao() || !emprestimoAtual) return;
+  const valor = parseFloat(document.getElementById('edit-emp-valor').value);
+  const taxa = parseFloat(document.getElementById('edit-emp-taxa').value);
+  const nPrestacoes = parseInt(document.getElementById('edit-emp-prestacoes').value, 10);
+  const periodicidade = document.getElementById('edit-emp-periodicidade').value;
+  const dataInicio = document.getElementById('edit-emp-data').value;
+  if (!valor || !nPrestacoes || !dataInicio || isNaN(taxa)){ log('Preenche todos os campos.', true); return; }
+
+  const antigas = mapaAtualLinhas.slice();
+  const pagoTotal = r2(antigas.reduce((s, r) => s + valorPagoPrestacao(r), 0));
+  const texto = pagoTotal > 0.004
+    ? 'O mapa atual vai ser apagado e substituído por um novo. Os ' + fmt(pagoTotal) + ' já recebidos são redistribuídos pelas primeiras prestações do novo mapa; os movimentos do banco não são alterados.'
+    : 'O mapa atual deste empréstimo vai ser apagado e substituído por um novo, calculado com estes valores.';
+  if (!await confirmar('Recalcular mapa de amortização?', texto, 'Guardar e recalcular', true)) return;
+
+  const anterior = {
+    valor_emprestimo: emprestimoAtual.valor_emprestimo, taxa_juro_anual: emprestimoAtual.taxa_juro_anual,
+    numero_prestacoes: emprestimoAtual.numero_prestacoes, periodicidade: emprestimoAtual.periodicidade, data_inicio: emprestimoAtual.data_inicio
+  };
+  const { error: errUpd } = await sb.from('emprestimos').update({
+    valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio
+  }).eq('id', emprestimoAtual.id);
+  if (errUpd){ log('Erro: ' + errUpd.message, true); return; }
+
+  const temColuna = antigas.length ? antigas[0].valor_pago !== undefined : await temColunaValorPago();
+  const datasPagas = antigas.filter(r => valorPagoPrestacao(r) > 0.004)
+    .sort((a, b) => a.numero_prestacao - b.numero_prestacao).map(r => r.data_pagamento || r.data_vencimento);
+  const linhas = gerarLinhasMapa(valor, taxa, nPrestacoes, dataInicio, periodicidade);
+
+  // redistribui o que já foi recebido pelas primeiras prestações
+  let restante = pagoTotal, k = 0;
+  for (const l of linhas){
+    if (restante <= 0.004) break;
+    const data = datasPagas[Math.min(k, datasPagas.length - 1)] || l.data_vencimento;
+    if (restante + 0.01 >= l.valor_prestacao){
+      l.estado = 'PAGO'; l.data_pagamento = data;
+      if (temColuna) l.valor_pago = r2(l.valor_prestacao);
+      restante = r2(restante - l.valor_prestacao); k++;
+    } else {
+      if (temColuna){ l.valor_pago = r2(restante); l.data_pagamento = data; restante = 0; }
+      break;
+    }
+  }
+  if (temColuna) linhas.forEach(l => { if (l.valor_pago === undefined) l.valor_pago = 0; });
+
+  const novas = linhas.map(l => ({ ...l, emprestimo_id: emprestimoAtual.id }));
+  const { error: errMapa } = await sb.from('mapa_amortizacao').insert(novas);
+  if (errMapa){
+    await sb.from('emprestimos').update(anterior).eq('id', emprestimoAtual.id);   // volta atrás: o mapa antigo mantém-se
+    log('Não foi possível recalcular o mapa: ' + errMapa.message, true); return;
+  }
+  if (antigas.length) await sb.from('mapa_amortizacao').delete().in('id', antigas.map(r => r.id));
+
+  log('Empréstimo atualizado e mapa recalculado.' + (restante > 0.01 ? ' Atenção: sobraram ' + fmt(restante) + ' dos valores recebidos sem prestação onde aplicar.' : ''));
+  emprestimoAtual = { ...emprestimoAtual, valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio };
+  carregarEmprestimos(pessoaAtual.nif);
+  verMapa(emprestimoAtual);
+}
+
+async function liquidarAntecipadamente(){
+  if (!requireGestao() || !emprestimoAtual) return;
+  const pendentes = mapaAtualLinhas.filter(r => r.estado !== 'PAGO');
+  if (!pendentes.length){ log('Este empréstimo já não tem prestações por pagar.', true); return; }
+  const capitalEmFalta = pendentes.reduce((s, r) => s + Number(r.valor_capital), 0);
+
+  const valorStr = prompt('Valor a receber para liquidar o empréstimo (capital em falta: ' + fmt(capitalEmFalta) + '):', capitalEmFalta.toFixed(2));
+  if (valorStr === null) return;
+  const valorLiquidacao = parseFloat(valorStr.replace(',', '.'));
+  if (isNaN(valorLiquidacao) || valorLiquidacao <= 0){ log('Valor inválido.', true); return; }
+
+  if (!await confirmar('Liquidar empréstimo?', 'Todas as ' + pendentes.length + ' prestações por pagar ficam marcadas como pagas, é lançada uma entrada de ' + fmt(valorLiquidacao) + ' no banco, e o empréstimo passa a LIQUIDADO.', 'Confirmar liquidação')) return;
+
+  const dataPag = hoje();
+  const ids = pendentes.map(r => r.id);
+  const { error: errUpd } = await sb.from('mapa_amortizacao').update({ estado:'PAGO', data_pagamento: dataPag }).in('id', ids);
+  if (errUpd){ log('Erro: ' + errUpd.message, true); return; }
+
+  await sb.from('movimentos_banco').insert({
+    tipo:'ENTRADA', valor: valorLiquidacao, data: dataPag,
+    descricao: 'Liquidação antecipada do empréstimo ' + emprestimoAtual.id
+  });
+
+  await sb.from('emprestimos').update({ estado:'LIQUIDADO' }).eq('id', emprestimoAtual.id);
+  emprestimoAtual.estado = 'LIQUIDADO';
+
+  log('Empréstimo liquidado antecipadamente.');
+  carregarEmprestimos(pessoaAtual.nif);
+  verMapa(emprestimoAtual);
+}
+
+async function anularEmprestimo(){
+  if (!requireGestao() || !emprestimoAtual) return;
+  if (!await confirmar('Anular este empréstimo?', 'O empréstimo fica marcado como ANULADO. As prestações e movimentos já registados não são apagados.', 'Anular', true)) return;
+
+  const { error } = await sb.from('emprestimos').update({ estado:'ANULADO' }).eq('id', emprestimoAtual.id);
+  if (error){ log('Erro: ' + error.message, true); return; }
+
+  emprestimoAtual.estado = 'ANULADO';
+  log('Empréstimo anulado.');
+  carregarEmprestimos(pessoaAtual.nif);
+  verMapa(emprestimoAtual);
+}
+
+async function anularCheque(idCheque){
+  if (!requireGestao()) return;
+  if (!await confirmar('Anular este cheque?', 'O cheque fica marcado como CANCELADO e é lançada uma entrada no banco a repor o valor.', 'Anular cheque', true)) return;
+
+  const { data: cheque, error: errSel } = await sb.from('cheques').select('*').eq('id', idCheque).single();
+  if (errSel){ log('Erro: ' + errSel.message, true); return; }
+
+  const { error: errUpd } = await sb.from('cheques').update({ estado:'CANCELADO' }).eq('id', idCheque);
+  if (errUpd){ log('Erro: ' + errUpd.message, true); return; }
+
+  await sb.from('movimentos_banco').insert({
+    tipo:'ENTRADA', valor: cheque.valor, data: hoje(),
+    descricao: 'Anulação do cheque nº ' + cheque.numero_cheque + ' — ' + cheque.beneficiario
+  });
+
+  log('Cheque anulado e valor reposto no saldo.');
+  carregarCheques();
+}
+
+/* ---------- LANÇAMENTO DE PAGAMENTOS: manual e por Excel ---------- */
+/* ---------- pagamentos: valores pagos, parciais e anulação ---------- */
+const r2 = n => Math.round(Number(n) * 100) / 100;
+const SQL_VALOR_PAGO = 'alter table mapa_amortizacao add column if not exists valor_pago numeric default 0;';
+const MSG_SEM_COLUNA = 'Para registar pagamentos parciais é preciso criar a coluna valor_pago no Supabase (SQL Editor): ' + SQL_VALOR_PAGO;
+
+let colValorPago = null;
+async function temColunaValorPago(){
+  if (colValorPago !== null) return colValorPago;
+  const r = await sb.from('mapa_amortizacao').select('valor_pago').limit(1);
+  colValorPago = !r.error;
+  return colValorPago;
+}
+// quanto já foi pago de uma prestação
+function valorPagoPrestacao(row){
+  const vp = Number(row.valor_pago || 0);
+  if (vp > 0.004) return vp;
+  return row.estado === 'PAGO' ? Number(row.valor_prestacao) : 0;
+}
+// quanto falta pagar (até 1 cêntimo conta como pago)
+function faltaPrestacao(row){
+  const f = Number(row.valor_prestacao) - valorPagoPrestacao(row);
+  return f <= 0.01 ? 0 : r2(f);
+}
+
+// Aplica um pagamento a partir de uma prestação; o excedente passa às seguintes do mesmo empréstimo.
+// Cada prestação tocada gera uma entrada no banco. Devolve { aplicados, sobra } ou { erro }.
+async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
+  const re = await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', rowInicial.emprestimo_id)
+    .neq('estado', 'PAGO').order('numero_prestacao');
+  if (re.error) return { erro: re.error.message };
+  const fila = (re.data || []).filter(r => r.numero_prestacao >= rowInicial.numero_prestacao);
+  let restante = r2(valor);
+  const aplicados = [];
+  for (const r of fila){
+    if (restante <= 0.004) break;
+    const temColuna = r.valor_pago !== undefined;
+    const ja = temColuna ? Number(r.valor_pago || 0) : 0;
+    const falta = faltaPrestacao(r);
+    if (falta === 0){   // já coberta: só fecha a prestação
+      const fecha = { estado:'PAGO', data_pagamento: dataPag };
+      if (temColuna) fecha.valor_pago = r2(Math.max(ja, Number(r.valor_prestacao)));
+      const uf = await sb.from('mapa_amortizacao').update(fecha).eq('id', r.id);
+      if (uf.error) return { erro: uf.error.message, aplicados };
+      continue;
+    }
+    const paga = Math.min(restante, falta);
+    const completa = paga + 0.01 >= falta;
+    if (!completa && !temColuna){
+      if (!aplicados.length) return { erro: MSG_SEM_COLUNA };
+      break;
+    }
+    const patch = completa ? { estado:'PAGO', data_pagamento: dataPag } : { data_pagamento: dataPag };
+    if (temColuna) patch.valor_pago = r2(ja + paga);
+    const up = await sb.from('mapa_amortizacao').update(patch).eq('id', r.id);
+    if (up.error) return { erro: up.error.message, aplicados };
+    await sb.from('movimentos_banco').insert({
+      tipo:'ENTRADA', valor: r2(paga), data: dataPag,
+      descricao: 'Pagamento prestação nº ' + r.numero_prestacao + ' (empréstimo ' + r.emprestimo_id + ')' + (completa ? '' : ' — parcial') + (sufixoDesc || '')
+    });
+    aplicados.push({ row: r, valor: r2(paga), completa, faltaApos: completa ? 0 : r2(falta - paga) });
+    restante = r2(restante - paga);
+    if (!completa) break;
+  }
+  return { aplicados, sobra: restante };
+}
+function descreverPagamento(res){
+  if (!res.aplicados.length) return 'Nada foi aplicado.';
+  let s = res.aplicados.map(a => 'prestação nº ' + a.row.numero_prestacao + (a.completa ? ' paga' : ' parcial (faltam ' + fmt(a.faltaApos) + ')')).join(', ');
+  if (res.sobra > 0.01) s += ' · sobraram ' + fmt(res.sobra) + ' sem prestação para aplicar (não lançados no banco)';
+  return s;
+}
+
+async function pagarParteApp(idPrestacao){
+  if (!requireGestao()) return;
+  const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
+  if (error){ log('Erro: ' + error.message, true); return; }
+  const falta = faltaPrestacao(row);
+  const txt = prompt('Valor recebido (em falta nesta prestação: ' + fmt(falta) + '):', falta.toFixed(2));
+  if (txt === null) return;
+  const valor = parseFloat(txt.replace(',', '.'));
+  if (isNaN(valor) || valor <= 0){ log('Valor inválido.', true); return; }
+  if (!await confirmar('Registar pagamento?', 'Vai registar ' + fmt(valor) + ' na prestação nº ' + row.numero_prestacao + ' e lançar a entrada no banco' + (valor + 0.01 < falta ? ' (pagamento parcial).' : '.'), 'Registar')) return;
+  const res = await aplicarPagamento(row, valor, hoje(), '');
+  if (res.erro){ log(res.erro, true); return; }
+  log('Pagamento registado: ' + descreverPagamento(res) + '.');
+  verMapa(emprestimoAtual);
+}
+
+async function anularPagamento(idPrestacao){
+  if (!requireGestao()) return;
+  const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
+  if (error){ log('Erro: ' + error.message, true); return; }
+  const pago = valorPagoPrestacao(row);
+  if (pago <= 0.004){ log('Esta prestação não tem pagamentos para anular.', true); return; }
+
+  const ref = 'prestação nº ' + row.numero_prestacao + ' (empréstimo ' + row.emprestimo_id + ')';
+  const ent = await sb.from('movimentos_banco').select('valor').eq('tipo', 'ENTRADA').ilike('descricao', 'Pagamento ' + ref + '%');
+  const sai = await sb.from('movimentos_banco').select('valor').eq('tipo', 'SAIDA').ilike('descricao', 'Anulação pagamento ' + ref + '%');
+  if (ent.error || sai.error){ log('Erro: ' + (ent.error || sai.error).message, true); return; }
+  const soma = a => (a || []).reduce((s, m) => s + Number(m.valor), 0);
+  const liquido = r2(soma(ent.data) - soma(sai.data));
+
+  const texto = 'A prestação nº ' + row.numero_prestacao + ' volta a ficar por pagar (valor pago: ' + fmt(pago) + '). ' +
+    (liquido > 0.004 ? 'Será lançada uma saída de ' + fmt(liquido) + ' no banco para anular a entrada.'
+                     : 'Não há entrada no banco associada a este pagamento, por isso não será lançado nenhum movimento.');
+  if (!await confirmar('Anular pagamento?', texto, 'Anular pagamento', true)) return;
+
+  const patch = { estado:'PENDENTE', data_pagamento: null };
+  if (row.valor_pago !== undefined) patch.valor_pago = 0;
+  const up = await sb.from('mapa_amortizacao').update(patch).eq('id', idPrestacao);
+  if (up.error){ log('Erro: ' + up.error.message, true); return; }
+  if (liquido > 0.004){
+    await sb.from('movimentos_banco').insert({
+      tipo:'SAIDA', valor: liquido, data: hoje(), descricao: 'Anulação pagamento ' + ref
+    });
+  }
+  log('Pagamento anulado (prestação nº ' + row.numero_prestacao + ').');
+  if (pessoaAtual) carregarEmprestimos(pessoaAtual.nif);
+  verMapa(emprestimoAtual);
+}
+
+/* ---------- pagamentos por NIF ---------- */
+// devolve { erro } ou { opcoes:[{emp,row}] } (uma opção por empréstimo ativo com prestações por pagar)
+async function proximaPrestacaoPorNif(nif, empId){
+  const re = await sb.from('emprestimos').select('id, valor_emprestimo, data_inicio, estado').eq('nif', nif).order('id');
+  if (re.error) return { erro: re.error.message };
+  const emps = re.data || [];
+  if (!emps.length) return { erro: 'Não existe nenhum empréstimo para o NIF ' + nif + '.' };
+  if (empId && !emps.some(e => e.id === empId)) return { erro: 'O empréstimo ' + empId + ' não pertence ao NIF ' + nif + '.' };
+  const ativos = emps.filter(e => (e.estado || 'ATIVO') === 'ATIVO' && (!empId || e.id === empId));
+  if (!ativos.length) return { erro: 'Este NIF não tem empréstimos ativos.' };
+  const rp = await sb.from('mapa_amortizacao').select('*').in('emprestimo_id', ativos.map(e => e.id)).neq('estado', 'PAGO').order('numero_prestacao');
+  if (rp.error) return { erro: rp.error.message };
+  const primeira = new Map();
+  (rp.data || []).forEach(r => { if (!primeira.has(r.emprestimo_id)) primeira.set(r.emprestimo_id, r); });
+  const opcoes = ativos.filter(e => primeira.has(e.id)).map(e => ({ emp: e, row: primeira.get(e.id) }));
+  if (!opcoes.length) return { erro: 'Este NIF não tem prestações por pagar.' };
+  return { opcoes };
+}
+
+let pmTimer = null;
+function pmPreviewAgendar(){
+  clearTimeout(pmTimer);
+  const sel = document.getElementById('pm-emp');
+  sel.innerHTML = ''; sel.style.display = 'none';
+  pmTimer = setTimeout(pmPreview, 350);
+}
+async function pmPreview(){
+  const info = document.getElementById('pm-info'), sel = document.getElementById('pm-emp');
+  const nif = document.getElementById('pm-nif').value.trim();
+  if (nif.length < 3 || !sb){ info.textContent = ''; sel.style.display = 'none'; sel.innerHTML = ''; return; }
+  const escolhido = sel.value ? parseInt(sel.value, 10) : null;
+  const { data: pes } = await sb.from('pessoas').select('nome').eq('nif', nif).maybeSingle();
+  const r = await proximaPrestacaoPorNif(nif, null);
+  if (document.getElementById('pm-nif').value.trim() !== nif) return;   // o NIF mudou entretanto
+  const nome = pes ? pes.nome + ' — ' : '';
+  if (r.erro){ info.textContent = nome + r.erro; sel.style.display = 'none'; sel.innerHTML = ''; return; }
+  sel.innerHTML = '';
+  r.opcoes.forEach(o => {
+    const op = document.createElement('option');
+    op.value = o.emp.id;
+    op.textContent = 'Empréstimo ' + o.emp.id + ' (' + o.emp.data_inicio + ', ' + fmt(o.emp.valor_emprestimo) + ') — prestação nº ' + o.row.numero_prestacao + ', ' + fmt(faltaPrestacao(o.row)) + ' em falta';
+    sel.appendChild(op);
+  });
+  if (escolhido && r.opcoes.some(o => o.emp.id === escolhido)) sel.value = escolhido;
+  sel.style.display = r.opcoes.length > 1 ? 'block' : 'none';
+  const o = r.opcoes.find(x => String(x.emp.id) === sel.value) || r.opcoes[0];
+  info.textContent = nome + 'próxima prestação por pagar: nº ' + o.row.numero_prestacao + ' (venc. ' + o.row.data_vencimento + '), ' + (valorPagoPrestacao(o.row) > 0.004 ? 'já pago ' + fmt(valorPagoPrestacao(o.row)) + ', ' : '') + 'em falta ' + fmt(faltaPrestacao(o.row));
+}
+
+async function registarPagamentoManual(){
+  if (!requireGestao()) return;
+  const nif = document.getElementById('pm-nif').value.trim();
+  const dataPag = document.getElementById('pm-data').value;
+  const valorTxt = document.getElementById('pm-valor').value;
+  const valorOverride = parseFloat(valorTxt);
+  if (!nif || !dataPag){ log('Indica o NIF e a data de pagamento.', true); return; }
+  if (valorTxt !== '' && (isNaN(valorOverride) || valorOverride <= 0)){ log('Valor pago inválido.', true); return; }
+
+  const sel = document.getElementById('pm-emp');
+  const empId = sel.style.display !== 'none' && sel.value ? parseInt(sel.value, 10) : null;
+  const r = await proximaPrestacaoPorNif(nif, empId);
+  if (r.erro){ log(r.erro, true); return; }
+  if (r.opcoes.length > 1){ log('Este NIF tem ' + r.opcoes.length + ' empréstimos ativos — escolhe o empréstimo na lista.', true); pmPreview(); return; }
+  const row = r.opcoes[0].row;
+
+  const valor = valorTxt !== '' ? valorOverride : faltaPrestacao(row);
+  const res = await aplicarPagamento(row, valor, dataPag, '');
+  if (res.erro){ log(res.erro, true); return; }
+
+  log('Pagamento registado (NIF ' + nif + '): ' + descreverPagamento(res) + '.');
+  document.getElementById('pm-nif').value = '';
+  document.getElementById('pm-valor').value = '';
+  document.getElementById('pm-info').textContent = '';
+  sel.innerHTML = ''; sel.style.display = 'none';
+  if (emprestimoAtual && res.aplicados.some(a => a.row.emprestimo_id === emprestimoAtual.id)) verMapa(emprestimoAtual);
+}
+
+async function exportarPendentes(){
+  if (!requireConn()) return;
+  const { data, error } = await sb.from('mapa_amortizacao')
+    .select('*, emprestimos(id, nif, data_inicio, pessoas(nome))')
+    .eq('estado', 'PENDENTE')
+    .order('data_vencimento');
+  if (error){ log('Erro: ' + error.message, true); return; }
+
+  const linhas = data.map(r => ({
+    'ID Prestação': r.id,
+    'NIF': r.emprestimos ? r.emprestimos.nif : '',
+    'Nome': r.emprestimos && r.emprestimos.pessoas ? r.emprestimos.pessoas.nome : '',
+    'Nº Empréstimo': r.emprestimo_id,
+    'Nº Prestação': r.numero_prestacao,
+    'Data Vencimento': r.data_vencimento,
+    'Valor Prestação': r.valor_prestacao,
+    'Já Pago': valorPagoPrestacao(r),
+    'Em Falta': faltaPrestacao(r),
+    'Estado': estadoPrestacao(r),
+    'Data Pagamento': '',
+    'Valor Pago': ''
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Prestações Pendentes');
+  XLSX.writeFile(wb, 'prestacoes_pendentes.xlsx');
+  log('Exportadas ' + linhas.length + ' prestações pendentes.');
+}
+
+async function importarPagamentosExcel(){
+  if (!requireGestao()) return;
+  const fileInput = document.getElementById('pm-file');
+  const file = fileInput.files[0];
+  const logEl = document.getElementById('import-log');
+  if (!file){ logEl.textContent = 'Escolhe um ficheiro primeiro.'; return; }
+
+  logEl.style.whiteSpace = 'pre-line';
+  logEl.textContent = 'A ler ficheiro...';
+  let wb;
+  try { wb = XLSX.read(await file.arrayBuffer(), { type:'array', cellDates:true }); }
+  catch (e){ logEl.textContent = 'Não foi possível ler o ficheiro: ' + e.message; return; }
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const m = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'' });
+
+  const hRow = m.findIndex(r => r.some(c => normCab(c) === 'nif'));
+  if (hRow < 0){ logEl.textContent = 'Não encontrei a coluna "NIF" no ficheiro.'; return; }
+  const cab = m[hRow].map(normCab);
+  const achar = (...res) => { for (const re of res){ const i = cab.findIndex(c => c && re.test(c)); if (i >= 0) return i; } return -1; };
+  const col = {
+    nif: achar(/^nif$/),
+    id: achar(/^id prest/),
+    emp: achar(/^n .*emprest/, /^emprestimo$/, /^id emprestimo$/),
+    data: achar(/data.*pag/),
+    pago: achar(/valor.*pago/, /^pago$/)
+  };
+  if (col.data < 0){ logEl.textContent = 'Não encontrei a coluna "Data Pagamento" no ficheiro.'; return; }
+
+  let processadas = 0, ignoradas = 0;
+  const erros = [], avisos = [];
+
+  for (let i = hRow + 1; i < m.length; i++){
+    const r = m[i];
+    if (!r.some(c => c !== '' && c !== null && c !== undefined)) continue;
+    const lin = i + 1;
+    const dataPag = dataCelula(r[col.data]);
+    if (!dataPag){ ignoradas++; continue; }          // sem Data Pagamento: não é para processar
+    logEl.textContent = 'A processar linha ' + lin + ' de ' + m.length + '...';
+    try {
+      const nif = String(r[col.nif] ?? '').trim();
+      const idPrest = col.id >= 0 ? parseInt(numeroCelula(r[col.id]), 10) : NaN;
+      const empId = col.emp >= 0 ? parseInt(numeroCelula(r[col.emp]), 10) : NaN;
+      const valorPagoCel = col.pago >= 0 ? numeroCelula(r[col.pago]) : NaN;
+
+      let row;
+      if (idPrest){                                    // ID da prestação preenchido: tem prioridade
+        const { data, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrest).maybeSingle();
+        if (error || !data){ erros.push('Linha ' + lin + ': prestação com ID ' + idPrest + ' não encontrada'); continue; }
+        if (data.estado === 'PAGO'){ ignoradas++; continue; }
+        row = data;
+      } else {
+        if (!nif){ erros.push('Linha ' + lin + ': falta o NIF'); continue; }
+        const res = await proximaPrestacaoPorNif(nif, empId || null);
+        if (res.erro){ erros.push('Linha ' + lin + ': ' + res.erro); continue; }
+        if (res.opcoes.length > 1){
+          erros.push('Linha ' + lin + ': o NIF ' + nif + ' tem ' + res.opcoes.length + ' empréstimos ativos — indica o Nº Empréstimo (' + res.opcoes.map(o => o.emp.id).join(', ') + ')');
+          continue;
+        }
+        row = res.opcoes[0].row;
+      }
+
+      const valor = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : faltaPrestacao(row);
+      const res = await aplicarPagamento(row, valor, dataPag, ' — importado de Excel');
+      if (res.erro){ erros.push('Linha ' + lin + ': ' + res.erro); continue; }
+      if (res.sobra > 0.01) avisos.push('Linha ' + lin + ': sobraram ' + fmt(res.sobra) + ' sem prestação onde aplicar');
+      processadas++;
+    } catch (e){
+      erros.push('Linha ' + lin + ': ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  let msg = processadas + ' pagamento(s) processado(s), ' + ignoradas + ' ignorada(s), ' + erros.length + ' com erro.';
+  if (erros.length) msg += '\n' + erros.slice(0, 10).join('\n') + (erros.length > 10 ? '\n... e mais ' + (erros.length - 10) + ' erro(s)' : '');
+  if (avisos.length) msg += '\n' + avisos.slice(0, 10).join('\n');
+  logEl.textContent = msg;
+  toast(processadas + ' processado(s), ' + erros.length + ' com erro', erros.length ? 'err' : 'ok');
+  fileInput.value = '';
+  if (emprestimoAtual) verMapa(emprestimoAtual);
+}
+
+/* ---------- BANCO ---------- */
+async function carregarBanco(){
+  if (!requireConn()) return;
+  const { data, error } = await sb.from('movimentos_banco').select('*').order('data').order('id');
+  if (error){ log('Erro: ' + error.message, true); return; }
+
+  const temInicial = data.some(m => m.tipo === 'SALDO_INICIAL');
+  document.getElementById('saldo-inicial-form').style.display = temInicial ? 'none' : 'block';
+  document.getElementById('saldo-inicial-set').style.display = temInicial ? 'block' : 'none';
+
+  let saldo = 0, entradas = 0, saidas = 0;
+  const tbody = document.getElementById('movimentos-body');
+  tbody.innerHTML = '';
+  document.getElementById('movimentos-vazio').style.display = data.length ? 'none' : 'block';
+
+  data.forEach(m => {
+    if (m.tipo === 'SALDO_INICIAL') saldo += Number(m.valor);
+    else if (m.tipo === 'ENTRADA'){ saldo += Number(m.valor); entradas += Number(m.valor); }
+    else { saldo -= Number(m.valor); saidas += Number(m.valor); }
+
+    if (m.tipo === 'SALDO_INICIAL'){
+      document.getElementById('saldo-inicial-set').textContent = 'Saldo inicial definido em ' + m.data + ': ' + fmt(m.valor);
+    }
+
+    const tr = document.createElement('tr');
+    const tipoLabel = m.tipo === 'SALDO_INICIAL' ? 'Saldo inicial' : (m.tipo === 'ENTRADA' ? 'Entrada' : 'Saída');
+    const badgeClass = m.tipo === 'SAIDA' ? 'saida' : 'entrada';
+    tr.innerHTML = `<td>${m.data}</td><td><span class="badge ${badgeClass}">${tipoLabel}</span></td><td>${m.descricao || ''}</td><td class="num ${m.tipo === 'SAIDA' ? 'neg' : 'pos'}">${m.tipo === 'SAIDA' ? '−' : '+'}${fmt(m.valor)}</td><td class="num">${fmt(saldo)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  animarNumero(document.getElementById('saldo-atual-valor'), saldo, 900);
+  animarNumero(document.getElementById('saldo-entradas'), entradas, 900);
+  animarNumero(document.getElementById('saldo-saidas'), saidas, 900);
+}
+
+async function definirSaldoInicial(){
+  if (!requireGestao()) return;
+  const valor = parseFloat(document.getElementById('si-valor').value);
+  const data = document.getElementById('si-data').value;
+  if (isNaN(valor) || !data){ log('Indica o valor e a data.', true); return; }
+  const { error } = await sb.from('movimentos_banco').insert({ tipo:'SALDO_INICIAL', valor, data, descricao:'Saldo inicial' });
+  if (error){ log('Erro: ' + error.message, true); return; }
+  log('Saldo inicial definido.');
+  document.getElementById('si-valor').value = '';
+  carregarBanco();
+}
+
+async function registarMovimento(){
+  if (!requireGestao()) return;
+  const tipo = document.getElementById('mov-tipo').value;
+  const valor = parseFloat(document.getElementById('mov-valor').value);
+  const data = document.getElementById('mov-data').value;
+  const descricao = document.getElementById('mov-desc').value.trim();
+  if (isNaN(valor) || valor <= 0 || !data){ log('Indica um valor válido e a data.', true); return; }
+  const { error } = await sb.from('movimentos_banco').insert({ tipo, valor, data, descricao });
+  if (error){ log('Erro: ' + error.message, true); return; }
+  document.getElementById('mov-valor').value = '';
+  document.getElementById('mov-desc').value = '';
+  log('Movimento registado.');
+  carregarBanco();
+}
+
+/* ---------- CHEQUES ---------- */
+async function carregarCheques(){
+  if (!requireConn()) return;
+  const { data, error } = await sb.from('cheques').select('*').order('data_emissao', {ascending:false});
+  if (error){ log('Erro: ' + error.message, true); return; }
+  const tbody = document.getElementById('cheques-body');
+  tbody.innerHTML = '';
+  document.getElementById('cheques-vazio').style.display = data.length ? 'none' : 'block';
+  data.forEach(c => {
+    const tr = document.createElement('tr');
+    const badgeClass = c.estado === 'EMITIDO' ? 'emitido' : (c.estado === 'COMPENSADO' ? 'compensado' : 'cancelado');
+    const podeAnular = c.estado === 'EMITIDO' && meuPapel === 'gestao';
+    tr.innerHTML = `<td>${c.numero_cheque}</td><td>${c.data_emissao}</td><td>${c.beneficiario}</td><td class="num">${fmt(c.valor)}</td><td><span class="badge ${badgeClass}">${c.estado}</span></td><td><button class="small ghost" onclick='imprimirCheque(${JSON.stringify(c)})'>Imprimir</button> ${podeAnular ? `<button class="small danger" onclick="anularCheque(${c.id})">Anular</button>` : ''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function emitirCheque(){
+  if (!requireGestao()) return;
+  const numero = document.getElementById('ch-numero').value.trim();
+  const beneficiario = document.getElementById('ch-beneficiario').value.trim();
+  const valor = parseFloat(document.getElementById('ch-valor').value);
+  const data = document.getElementById('ch-data').value;
+  const motivo = document.getElementById('ch-motivo').value.trim();
+  if (!numero || !beneficiario || isNaN(valor) || valor <= 0 || !data){ log('Preenche nº, beneficiário, valor e data.', true); return; }
+  if (!await confirmar('Emitir cheque?', 'Cheque nº ' + numero + ' de ' + fmt(valor) + ' para ' + beneficiario + '. Será registada uma saída no banco.', 'Emitir cheque')) return;
+
+  const { data: mov, error: errMov } = await sb.from('movimentos_banco').insert({
+    tipo:'SAIDA', valor, data, descricao:'Cheque nº ' + numero + ' — ' + beneficiario
+  }).select().single();
+  if (errMov){ log('Erro ao registar saída: ' + errMov.message, true); return; }
+
+  const { data: cheque, error: errCh } = await sb.from('cheques').insert({
+    numero_cheque: numero, beneficiario, valor, data_emissao: data, motivo, movimento_id: mov.id
+  }).select().single();
+  if (errCh){ log('Erro ao emitir cheque: ' + errCh.message, true); return; }
+
+  await sb.from('movimentos_banco').update({ cheque_id: cheque.id }).eq('id', mov.id);
+
+  log('Cheque emitido e saída registada no banco.');
+  document.getElementById('ch-numero').value = '';
+  document.getElementById('ch-beneficiario').value = '';
+  document.getElementById('ch-valor').value = '';
+  document.getElementById('ch-motivo').value = '';
+  carregarCheques();
+}
+
+function imprimirCheque(c){
+  const [ano, mes, dia] = (c.data_emissao || '').split('-');
+  document.getElementById('pc-titular').textContent = cfg.titular || '';
+  document.getElementById('pc-moeda').textContent = (cfg.moedaPlur || 'escudos').toUpperCase() + ' CV';
+  document.getElementById('pc-valor').textContent = fmt(c.valor) + '$';
+  document.getElementById('pc-local').textContent = cfg.localEmissao || 'Praia';
+  document.getElementById('pc-ano').textContent = ano || '';
+  document.getElementById('pc-mes').textContent = mes || '';
+  document.getElementById('pc-dia').textContent = dia || '';
+  document.getElementById('pc-beneficiario').textContent = c.beneficiario;
+  document.getElementById('pc-extenso').textContent = numeroPorExtenso(c.valor) + ' -------------------------------';
+  document.getElementById('pc-numero').textContent = c.numero_cheque;
+  document.getElementById('pc-conta').textContent = cfg.conta || '—';
+  window.print();
+}
+</script>
+</body>
+</html>
