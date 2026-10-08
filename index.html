@@ -248,11 +248,16 @@
   .filter-row input,.filter-row select{height:36px;}
   .filter-row button{height:36px;}
 
+  /* mapa de amortização: colunas com espaço e botões numa só linha (a tabela desliza na horizontal em ecrãs pequenos) */
+  #tabela-mapa{min-width:1020px;}
+  #tabela-mapa th.num,#tabela-mapa td.num{min-width:86px;}
+  #tabela-mapa th:nth-child(9),#tabela-mapa td:nth-child(9){padding-left:26px;}
+  #tabela-mapa td:last-child{white-space:nowrap;}
+  #tabela-mapa td:last-child button{white-space:nowrap;}
+
   #tabela-todos-emprestimos td{padding:4px 10px;line-height:1.35;}
   #tabela-todos-emprestimos tbody tr:nth-child(even){background:color-mix(in srgb,var(--card-2) 65%,var(--card));}
   #tabela-todos-emprestimos tbody tr:hover{background:var(--accent-soft);}
-  #tabela-todos-emprestimos .badge{background:transparent;padding:0;font-size:11px;}
-  #tabela-todos-emprestimos .badge::before{display:none;}
 
   .grid-eq{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;}
   .grid-eq > .panel{margin-top:0;}
@@ -296,16 +301,19 @@
   tr.loan-row.selected{background:var(--accent-soft);}
   tr.loan-row.selected td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
   tr.row-paid td{color:var(--muted);}
-  tr.row-paid td.num.pago-cell{text-decoration:none !important;color:var(--ok);}
+  tr.row-paid td.num.pago-cell,tr.row-paid td.num.falta-cell{text-decoration:none !important;}
+  tr.row-paid td.num.pago-cell{color:var(--ok);}
+  td.num.falta-cell.zero{color:var(--muted);}
   tr.row-paid td.num{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--muted) 55%,transparent);}
   td.pos{color:var(--ok);font-weight:600;}
   td.neg{color:var(--danger);font-weight:600;}
 
-  .badge{display:inline-block;padding:3px 10px;border-radius:var(--radius);font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;}
-  .badge::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:7px;vertical-align:middle;}
-  .badge.ativo,.badge.pago,.badge.compensado,.badge.entrada,.badge.liquidado{background:var(--ok-soft);color:var(--ok);}
-  .badge.emitido,.badge.pendente,.badge.parcial{background:var(--warn-soft);color:var(--warn);}
-  .badge.cancelado,.badge.atrasado,.badge.saida,.badge.anulado{background:var(--danger-soft);color:var(--danger);}
+  .badge{display:inline-block;padding:0;background:transparent;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;}
+  .badge::before{display:none;}
+  .badge.ativo,.badge.pago,.badge.compensado,.badge.entrada,.badge.liquidado{color:var(--ok);}
+  .badge.emitido,.badge.pendente{color:var(--warn);}
+  .badge.parcial{color:#7c3aed;}
+  .badge.cancelado,.badge.atrasado,.badge.saida,.badge.anulado{color:var(--danger);}
 
   .divider{border:none;border-top:1px solid var(--line);margin:18px 0;}
   .empty{color:var(--muted);font-size:13px;padding:6px 0;}
@@ -613,8 +621,8 @@
             </div>
           </div>
 
-          <table>
-            <thead><tr><th>#</th><th>Vencimento</th><th class="num">Prestação</th><th class="num">Juro</th><th class="num">Capital</th><th class="num">Em dívida</th><th class="num">Pago</th><th>Estado</th><th></th></tr></thead>
+          <table id="tabela-mapa">
+            <thead><tr><th>#</th><th>Vencimento</th><th class="num">Prestação</th><th class="num">Juro</th><th class="num">Capital</th><th class="num">Em dívida</th><th class="num">Pago</th><th class="num">Em falta</th><th>Estado</th><th></th></tr></thead>
             <tbody id="mapa-body"></tbody>
           </table>
         </section>
@@ -2069,8 +2077,8 @@ async function verMapa(emp){
       if (estadoReal !== 'PAGO') acoes += `<button class="small ghost" onclick="marcarPago(${row.id})">Marcar pago</button> <button class="small ghost" onclick="pagarParteApp(${row.id})">Pagar parte</button> `;
       if (pagoV > 0.004) acoes += `<button class="small ghost" onclick="anularPagamento(${row.id})">Anular pagamento</button>`;
     }
-    const pagoTxt = pagoV > 0.004 ? fmt(pagoV) + (estadoReal !== 'PAGO' ? ` <small style="color:var(--muted)">(faltam ${fmt(falta)})</small>` : '') : '';
-    tr.innerHTML = `<td>${row.numero_prestacao}</td><td>${row.data_vencimento}</td><td class="num">${fmt(row.valor_prestacao)}</td><td class="num">${fmt(row.valor_juro)}</td><td class="num">${fmt(row.valor_capital)}</td><td class="num">${fmt(row.capital_em_divida)}</td><td class="num pago-cell">${pagoTxt}</td><td><span class="badge ${badgeClassePrestacao(estadoReal)}">${estadoReal}</span></td><td>${acoes}</td>`;
+    const faltaV = estadoReal === 'PAGO' ? 0 : falta;
+    tr.innerHTML = `<td>${row.numero_prestacao}</td><td>${row.data_vencimento}</td><td class="num">${fmt(row.valor_prestacao)}</td><td class="num">${fmt(row.valor_juro)}</td><td class="num">${fmt(row.valor_capital)}</td><td class="num">${fmt(row.capital_em_divida)}</td><td class="num pago-cell">${fmt(pagoV)}</td><td class="num falta-cell${faltaV === 0 ? ' zero' : ''}">${fmt(faltaV)}</td><td><span class="badge ${badgeClassePrestacao(estadoReal)}">${estadoReal}</span></td><td>${acoes}</td>`;
     tbody.appendChild(tr);
   });
 
