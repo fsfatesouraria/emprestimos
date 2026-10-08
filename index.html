@@ -446,8 +446,8 @@
   </div>
   <div class="side-group">
     <div class="side-title">Empréstimos</div>
-    <button class="side-link active" data-view="emprestimos" onclick="mudarVista('emprestimos')">Novo / Pesquisar</button>
-    <button class="side-link" data-view="lista" onclick="mudarVista('lista')">Lista de empréstimos</button>
+    <button class="side-link" data-view="emprestimos" onclick="mudarVista('emprestimos')">Novo / Pesquisar</button>
+    <button class="side-link active" data-view="lista" onclick="mudarVista('lista')">Lista de empréstimos</button>
     <button class="side-link" data-view="pagamentos" onclick="mudarVista('pagamentos')">Pagamentos</button>
     <button class="side-link" data-view="simulador" onclick="mudarVista('simulador')">Simulador</button>
   </div>
@@ -471,7 +471,7 @@
 </aside>
 <main>
   <!-- ==================== VISTA: EMPRÉSTIMOS ==================== -->
-  <div class="view active" id="view-emprestimos">
+  <div class="view" id="view-emprestimos">
     <section class="panel pessoa-panel">
       <h2>Pessoa</h2>
       <div class="pessoa-row">
@@ -636,7 +636,7 @@
   </div>
 
   <!-- ==================== VISTA: LISTA ==================== -->
-  <div class="view" id="view-lista">
+  <div class="view active" id="view-lista">
     <section class="panel">
       <h2>Todos os empréstimos concedidos</h2>
       <div class="kpis">
@@ -1387,7 +1387,7 @@ async function entrarComSessao(user){
   document.getElementById('conta-email').textContent = nomeVisivel(user.email);
 
   aplicarPermissoes();
-  carregarTodosEmprestimos();
+  mudarVista('lista');   // o programa abre na lista de empréstimos
 }
 
 async function sair(){
