@@ -781,17 +781,19 @@
     <div class="grid-eq">
       <section class="panel">
           <h2>Exportar prestações pendentes</h2>
-          <div class="empty">Gera um Excel com todas as prestações por pagar, pronto a preencher e reimportar.</div>
+          <div class="empty">Gera um Excel com uma linha por pessoa (colunas ID, NIF, Nome, Valor): só a próxima prestação por pagar. Se a pessoa tiver mais de um empréstimo ativo, as prestações são somadas numa só linha. Preenche Data Pagamento (e Valor Pago, se for diferente) e reimporta ao lado.</div>
           <button class="ghost" onclick="exportarPendentes()">Exportar para Excel</button>
         </section>
       <section class="panel gestao-only">
         <h2>Importar pagamentos por Excel</h2>
         <div class="empty">
           O ficheiro deve ter as colunas <strong>NIF</strong> e <strong>Data Pagamento</strong> (formato de data), e opcionalmente <strong>Valor Pago</strong>
-          e <strong>Nº Empréstimo</strong> (só necessário se a pessoa tiver mais de um empréstimo ativo).
-          Cada linha paga a próxima prestação por pagar desse NIF; para pagar duas prestações, usa duas linhas.
-          Se a coluna <strong>ID Prestação</strong> estiver preenchida (como no ficheiro exportado), esse ID tem prioridade.
-          Só as linhas com Data Pagamento preenchida são processadas. Em <strong>Valor Pago</strong> podes pôr só uma parte (pagamento parcial) ou mais do que a prestação (o excedente passa para as seguintes); em branco paga o que falta.
+          e <strong>Nº Empréstimo</strong>. Funciona com o ficheiro exportado ao lado: em branco, o Valor Pago é o valor da linha.
+          Cada linha paga a próxima prestação por pagar desse NIF. Se a pessoa tiver mais de um empréstimo ativo e não indicares o Nº Empréstimo,
+          o valor é repartido automaticamente: primeiro a próxima prestação de cada empréstimo (por ordem de vencimento) e o que sobrar segue para as prestações seguintes.
+          Para pagar mais prestações da mesma pessoa, aumenta o Valor Pago ou usa mais linhas.
+          Se a coluna <strong>ID Prestação</strong> estiver preenchida, esse ID tem prioridade.
+          Só as linhas com Data Pagamento preenchida são processadas. Um Valor Pago menor do que o devido fica como pagamento parcial.
         </div>
         <label for="pm-file">Ficheiro Excel (.xlsx)</label>
         <input id="pm-file" type="file" accept=".xlsx,.xls">
@@ -2305,9 +2307,38 @@ async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
 }
 function descreverPagamento(res){
   if (!res.aplicados.length) return 'Nada foi aplicado.';
-  let s = res.aplicados.map(a => 'prestação nº ' + a.row.numero_prestacao + (a.completa ? ' paga' : ' parcial (faltam ' + fmt(a.faltaApos) + ')')).join(', ');
+  const varios = new Set(res.aplicados.map(a => a.row.emprestimo_id)).size > 1;
+  let s = res.aplicados.map(a => (varios ? 'empréstimo ' + a.row.emprestimo_id + ', ' : '') + 'prestação nº ' + a.row.numero_prestacao + (a.completa ? ' paga' : ' parcial (faltam ' + fmt(a.faltaApos) + ')')).join('; ');
   if (res.sobra > 0.01) s += ' · sobraram ' + fmt(res.sobra) + ' sem prestação para aplicar (não lançados no banco)';
   return s;
+}
+
+// Reparte um pagamento pelos empréstimos ativos de um NIF: primeiro a próxima prestação de cada
+// empréstimo (por ordem de vencimento); o que sobrar segue para as prestações seguintes.
+async function aplicarPagamentoPessoa(nif, opcoes, valor, dataPag, sufixoDesc){
+  const ordenadas = [...opcoes].sort((a, b) =>
+    a.row.data_vencimento < b.row.data_vencimento ? -1 : a.row.data_vencimento > b.row.data_vencimento ? 1 : a.emp.id - b.emp.id);
+  let restante = r2(valor);
+  const todos = [];
+  for (const o of ordenadas){                       // ronda 1: a próxima prestação de cada empréstimo
+    if (restante <= 0.004) break;
+    const falta = faltaPrestacao(o.row);
+    if (falta === 0) continue;
+    const res = await aplicarPagamento(o.row, Math.min(restante, falta), dataPag, sufixoDesc);
+    if (res.erro) return { erro: res.erro, aplicados: todos };
+    todos.push(...res.aplicados);
+    restante = r2(restante - Math.min(restante, falta) + (res.sobra || 0));
+  }
+  for (const o of ordenadas){                       // ronda 2: o resto segue pelas prestações seguintes
+    if (restante <= 0.004) break;
+    const pr = await proximaPrestacaoPorNif(nif, o.emp.id);
+    if (pr.erro) continue;
+    const res = await aplicarPagamento(pr.opcoes[0].row, restante, dataPag, sufixoDesc);
+    if (res.erro) return { erro: res.erro, aplicados: todos };
+    todos.push(...res.aplicados);
+    restante = res.sobra;
+  }
+  return { aplicados: todos, sobra: restante };
 }
 
 async function pagarParteApp(idPrestacao){
@@ -2438,32 +2469,53 @@ async function registarPagamentoManual(){
 
 async function exportarPendentes(){
   if (!requireConn()) return;
-  const { data, error } = await sb.from('mapa_amortizacao')
-    .select('*, emprestimos(id, nif, data_inicio, pessoas(nome))')
-    .eq('estado', 'PENDENTE')
-    .order('data_vencimento');
-  if (error){ log('Erro: ' + error.message, true); return; }
+  // todas as prestações por pagar (em páginas, para não ficar pelo limite de 1000 linhas)
+  const pend = [];
+  for (let de = 0; ; de += 1000){
+    const { data, error } = await sb.from('mapa_amortizacao')
+      .select('*, emprestimos(id, nif, estado, pessoas(nome))')
+      .neq('estado', 'PAGO').order('id').range(de, de + 999);
+    if (error){ log('Erro: ' + error.message, true); return; }
+    pend.push(...data);
+    if (data.length < 1000) break;
+  }
 
-  const linhas = data.map(r => ({
-    'ID Prestação': r.id,
-    'NIF': r.emprestimos ? r.emprestimos.nif : '',
-    'Nome': r.emprestimos && r.emprestimos.pessoas ? r.emprestimos.pessoas.nome : '',
-    'Nº Empréstimo': r.emprestimo_id,
-    'Nº Prestação': r.numero_prestacao,
-    'Data Vencimento': r.data_vencimento,
-    'Valor Prestação': r.valor_prestacao,
-    'Já Pago': valorPagoPrestacao(r),
-    'Em Falta': faltaPrestacao(r),
-    'Estado': estadoPrestacao(r),
+  // a próxima prestação por pagar de cada empréstimo ativo
+  const proxima = new Map();
+  pend.forEach(r => {
+    if (!r.emprestimos || (r.emprestimos.estado || 'ATIVO') !== 'ATIVO') return;
+    const atual = proxima.get(r.emprestimo_id);
+    if (!atual || r.numero_prestacao < atual.numero_prestacao) proxima.set(r.emprestimo_id, r);
+  });
+
+  // junta por NIF: se houver mais de um empréstimo, soma os valores
+  const porNif = new Map();
+  proxima.forEach(r => {
+    const nif = r.emprestimos.nif;
+    if (!porNif.has(nif)) porNif.set(nif, { nif, nome: r.emprestimos.pessoas ? r.emprestimos.pessoas.nome : '', ids: [], valor: 0, venc: r.data_vencimento });
+    const g = porNif.get(nif);
+    g.ids.push(r.id);
+    g.valor += faltaPrestacao(r);
+    if (r.data_vencimento < g.venc) g.venc = r.data_vencimento;
+  });
+
+  const grupos = [...porNif.values()].sort((a, b) => a.venc < b.venc ? -1 : a.venc > b.venc ? 1 : String(a.nome).localeCompare(String(b.nome)));
+  const linhas = grupos.map(g => ({
+    'ID': g.ids.join('+'),
+    'NIF': g.nif,
+    'Nome': g.nome,
+    'Valor': r2(g.valor),
     'Data Pagamento': '',
     'Valor Pago': ''
   }));
+  if (!linhas.length){ log('Não há prestações pendentes para exportar.'); return; }
 
   const ws = XLSX.utils.json_to_sheet(linhas);
+  ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 14 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Prestações Pendentes');
   XLSX.writeFile(wb, 'prestacoes_pendentes.xlsx');
-  log('Exportadas ' + linhas.length + ' prestações pendentes.');
+  log('Exportadas ' + linhas.length + ' pessoa(s) com prestação pendente.');
 }
 
 async function importarPagamentosExcel(){
@@ -2510,7 +2562,7 @@ async function importarPagamentosExcel(){
       const empId = col.emp >= 0 ? parseInt(numeroCelula(r[col.emp]), 10) : NaN;
       const valorPagoCel = col.pago >= 0 ? numeroCelula(r[col.pago]) : NaN;
 
-      let row;
+      let row = null, multi = null;
       if (idPrest){                                    // ID da prestação preenchido: tem prioridade
         const { data, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrest).maybeSingle();
         if (error || !data){ erros.push('Linha ' + lin + ': prestação com ID ' + idPrest + ' não encontrada'); continue; }
@@ -2520,17 +2572,20 @@ async function importarPagamentosExcel(){
         if (!nif){ erros.push('Linha ' + lin + ': falta o NIF'); continue; }
         const res = await proximaPrestacaoPorNif(nif, empId || null);
         if (res.erro){ erros.push('Linha ' + lin + ': ' + res.erro); continue; }
-        if (res.opcoes.length > 1){
-          erros.push('Linha ' + lin + ': o NIF ' + nif + ' tem ' + res.opcoes.length + ' empréstimos ativos — indica o Nº Empréstimo (' + res.opcoes.map(o => o.emp.id).join(', ') + ')');
-          continue;
-        }
-        row = res.opcoes[0].row;
+        if (res.opcoes.length > 1) multi = res.opcoes;
+        else row = res.opcoes[0].row;
       }
 
-      const valor = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : faltaPrestacao(row);
-      const res = await aplicarPagamento(row, valor, dataPag, ' — importado de Excel');
-      if (res.erro){ erros.push('Linha ' + lin + ': ' + res.erro); continue; }
-      if (res.sobra > 0.01) avisos.push('Linha ' + lin + ': sobraram ' + fmt(res.sobra) + ' sem prestação onde aplicar');
+      const informado = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : null;
+      let resp;
+      if (multi){
+        const devido = r2(multi.reduce((s, o) => s + faltaPrestacao(o.row), 0));
+        resp = await aplicarPagamentoPessoa(nif, multi, informado !== null ? informado : devido, dataPag, ' — importado de Excel');
+      } else {
+        resp = await aplicarPagamento(row, informado !== null ? informado : faltaPrestacao(row), dataPag, ' — importado de Excel');
+      }
+      if (resp.erro){ erros.push('Linha ' + lin + ': ' + resp.erro); continue; }
+      if (resp.sobra > 0.01) avisos.push('Linha ' + lin + ': sobraram ' + fmt(resp.sobra) + ' sem prestação onde aplicar');
       processadas++;
     } catch (e){
       erros.push('Linha ' + lin + ': ' + (e && e.message ? e.message : e));
