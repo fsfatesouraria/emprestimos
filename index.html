@@ -408,8 +408,8 @@
       <p class="sub">Acede ao teu livro de empréstimos</p>
     </div>
   </div>
-  <label for="login-email">Email</label>
-  <input id="login-email" type="email" placeholder="email@exemplo.com" autocomplete="username">
+  <label for="login-email">Utilizador ou email</label>
+  <input id="login-email" type="text" placeholder="nome ou email@exemplo.com" autocomplete="username">
   <label for="login-pass">Palavra-passe</label>
   <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password">
   <div class="btn-row">
@@ -834,9 +834,9 @@
 
     <section class="panel gestao-only">
       <h2>Criar utilizador</h2>
-      <div class="empty">O utilizador entra diretamente com este email e palavra-passe — não precisa de se registar nem de confirmar email.</div>
-      <label for="nu-email">Email</label>
-      <input id="nu-email" type="email" placeholder="email@exemplo.com">
+      <div class="empty">O utilizador entra diretamente com este nome (ou email) e a palavra-passe — não precisa de se registar nem de confirmar email. Podes usar só um nome, por exemplo «Maria Silva»; para entrar escreve o mesmo nome (maiúsculas e acentos são ignorados).</div>
+      <label for="nu-email">Nome de utilizador ou email</label>
+      <input id="nu-email" type="text" placeholder="Maria Silva  ou  email@exemplo.com" autocomplete="off">
       <label for="nu-pass">Palavra-passe inicial</label>
       <input id="nu-pass" type="password" placeholder="mínimo 6 caracteres">
       <label for="nu-papel">Perfil</label>
@@ -853,7 +853,7 @@
         Perfil <strong>consulta</strong>: só pode ver dados. Perfil <strong>gestão</strong>: pode criar, editar e apagar, e criar novos utilizadores.
       </div>
       <table>
-        <thead><tr><th>Email</th><th>Papel</th><th></th></tr></thead>
+        <thead><tr><th>Utilizador</th><th>Papel</th><th></th></tr></thead>
         <tbody id="utilizadores-body"></tbody>
       </table>
     </section>
@@ -863,7 +863,7 @@
   <div class="view" id="view-conta">
     <section class="panel" style="max-width:420px;">
       <h2>A minha conta</h2>
-      <div class="empty">A tua sessão está associada ao email <strong id="conta-email"></strong>.</div>
+      <div class="empty">A tua sessão está associada à conta <strong id="conta-email"></strong>.</div>
       <label for="np-pass1">Nova palavra-passe</label>
       <input id="np-pass1" type="password" placeholder="mínimo 6 caracteres" autocomplete="new-password">
       <label for="np-pass2">Confirmar nova palavra-passe</label>
@@ -1307,12 +1307,36 @@ async function verificarSessao(){
   }
 }
 
+/* ---------- utilizadores só com nome (sem email) ---------- */
+// O Supabase exige um email para cada conta; para quem só tem nome criamos um email interno
+// derivado do nome (nome.apelido@utilizador.local). Quem entra escreve apenas o nome.
+const DOMINIO_UTILIZADOR = 'utilizador.local';
+function slugUtilizador(s){
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+}
+function emailDeLogin(texto){
+  const s = String(texto || '').trim();
+  if (!s) return '';
+  if (s.includes('@')) return s;
+  const slug = slugUtilizador(s);
+  return slug ? slug + '@' + DOMINIO_UTILIZADOR : '';
+}
+function nomeVisivel(email){
+  if (!email) return '';
+  const suf = '@' + DOMINIO_UTILIZADOR;
+  if (email.toLowerCase().endsWith(suf)){
+    return email.slice(0, -suf.length).split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+  return email;
+}
+
 async function entrar(){
   if (!sb){ log('A aplicação ainda não ligou ao Supabase — tenta recarregar a página.', true); return; }
-  const email = document.getElementById('login-email').value.trim();
+  const email = emailDeLogin(document.getElementById('login-email').value);
   const password = document.getElementById('login-pass').value;
   const logEl = document.getElementById('login-log');
-  if (!email || !password){ logEl.textContent = 'Indica email e palavra-passe.'; return; }
+  if (!email || !password){ logEl.textContent = 'Indica o utilizador (ou email) e a palavra-passe.'; return; }
 
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error){ logEl.textContent = 'Erro ao entrar: ' + error.message; return; }
@@ -1332,10 +1356,10 @@ async function entrarComSessao(user){
   document.getElementById('login-panel').style.display = 'none';
   document.getElementById('app-content').style.display = 'block';
   document.getElementById('user-bar').style.display = 'inline';
-  document.getElementById('user-email').textContent = user.email;
-  document.getElementById('user-avatar').textContent = (user.email || '?')[0].toUpperCase();
+  document.getElementById('user-email').textContent = nomeVisivel(user.email);
+  document.getElementById('user-avatar').textContent = (nomeVisivel(user.email) || '?')[0].toUpperCase();
   document.getElementById('user-papel').textContent = meuPapel === 'gestao' ? 'gestão' : 'consulta';
-  document.getElementById('conta-email').textContent = user.email;
+  document.getElementById('conta-email').textContent = nomeVisivel(user.email);
 
   aplicarPermissoes();
   carregarTodosEmprestimos();
@@ -1367,7 +1391,7 @@ async function carregarUtilizadores(){
     const tr = document.createElement('tr');
     const outroPapel = p.papel === 'gestao' ? 'consulta' : 'gestao';
     const rotulo = outroPapel === 'gestao' ? 'Tornar gestão' : 'Tornar consulta';
-    tr.innerHTML = `<td>${p.email || p.user_id}</td><td><span class="badge ${p.papel === 'gestao' ? 'ativo' : 'pendente'}">${p.papel}</span></td><td><button class="small ghost" onclick="mudarPapel('${p.user_id}','${outroPapel}')">${rotulo}</button></td>`;
+    tr.innerHTML = `<td>${nomeVisivel(p.email) || p.user_id}</td><td><span class="badge ${p.papel === 'gestao' ? 'ativo' : 'pendente'}">${p.papel}</span></td><td><button class="small ghost" onclick="mudarPapel('${p.user_id}','${outroPapel}')">${rotulo}</button></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -1383,19 +1407,29 @@ async function mudarPapel(userId, novoPapel){
 
 async function criarUtilizador(){
   if (!requireGestao()) return;
-  const email = document.getElementById('nu-email').value.trim();
+  const nomeTxt = document.getElementById('nu-email').value.trim();
+  const email = emailDeLogin(nomeTxt);
   const password = document.getElementById('nu-pass').value;
   const papel = document.getElementById('nu-papel').value;
-  if (!email || !password){ log('Indica o email e a palavra-passe.', true); return; }
+  if (!email || !password){ log('Indica o nome (ou email) e a palavra-passe.', true); return; }
+  if (!nomeTxt.includes('@') && email.split('@')[0].length < 2){ log('O nome de utilizador deve ter pelo menos 2 letras ou números.', true); return; }
   if (password.length < 6){ log('A palavra-passe deve ter pelo menos 6 caracteres.', true); return; }
 
   const { data, error } = await sb.functions.invoke('admin-create-user', {
     body: { email, password, papel }
   });
-  if (error){ log('Erro ao criar utilizador: ' + (error.message || 'falha na função admin-create-user'), true); return; }
+  if (error){
+    let msg = error.message || 'falha na função admin-create-user';
+    if (error.name === 'FunctionsFetchError'){
+      msg = 'não foi possível contactar a função "admin-create-user" no Supabase. Confirma que está publicada (Edge Functions) e que responde a pedidos CORS.';
+    } else if (error.context && typeof error.context.json === 'function'){
+      try { const j = await error.context.json(); if (j && (j.error || j.message)) msg = j.error || j.message; } catch (e){}
+    }
+    log('Erro ao criar utilizador: ' + msg, true); return;
+  }
   if (data && data.error){ log('Erro ao criar utilizador: ' + data.error, true); return; }
 
-  log('Utilizador criado com sucesso.');
+  log('Utilizador criado com sucesso. Para entrar, escreve ' + (nomeTxt.includes('@') ? 'o email' : 'o nome «' + nomeVisivel(email) + '»') + ' e a palavra-passe.');
   document.getElementById('nu-email').value = '';
   document.getElementById('nu-pass').value = '';
   document.getElementById('nu-papel').value = 'consulta';
