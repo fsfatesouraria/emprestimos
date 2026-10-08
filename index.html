@@ -8,6 +8,8 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
     --bg:#fafafa; --card:#FFFFFF; --card-2:#EAEBEF;
@@ -243,6 +245,11 @@
 
   .filter-row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px;}
   .filter-row > div{flex:0 1 190px;min-width:140px;}
+  .btn-icon{width:42px;height:36px;padding:0;margin:0;display:inline-flex;align-items:center;justify-content:center;color:#fff;box-shadow:none;}
+  .btn-icon.btn-excel{background:#1d7a46;border:1px solid #1d7a46;}
+  .btn-icon.btn-pdf{background:#d62839;border:1px solid #d62839;}
+  .btn-icon:hover{filter:brightness(1.1);transform:none;box-shadow:none;}
+  .filter-row > .filter-actions{display:flex;gap:8px;flex:none;min-width:0;margin-left:auto;}
   .filter-row label{margin-top:0;}
   .filter-row button{margin-top:0;}
   .filter-row input,.filter-row select{height:36px;}
@@ -499,7 +506,7 @@
         <div class="pessoa-form">
           <div class="pf"><label for="edit-nome">Nome</label><input id="edit-nome" placeholder="Nome completo"></div>
           <div class="pf"><label for="edit-contacto">Contacto</label><input id="edit-contacto" placeholder="Opcional"></div>
-          <div class="pf"><label for="edit-limite">Limite de crédito (opcional)</label><input id="edit-limite" type="number" step="0.01" placeholder="Deixa em branco para não haver limite"></div>
+          <div class="pf"><label for="edit-limite">Limite de crédito (opcional)</label><input id="edit-limite" type="number" step="1" placeholder="Deixa em branco para não haver limite"></div>
           <div class="btn-row">
             <button onclick="guardarEdicaoPessoa()">Guardar</button>
             <button class="ghost" onclick="document.getElementById('editar-pessoa').style.display='none'">Cancelar</button>
@@ -513,7 +520,7 @@
         <div class="pessoa-form">
           <div class="pf"><label for="novo-nome">Nome</label><input id="novo-nome" placeholder="Nome completo"></div>
           <div class="pf"><label for="novo-contacto">Contacto</label><input id="novo-contacto" placeholder="Opcional"></div>
-          <div class="pf"><label for="novo-limite">Limite de crédito (opcional)</label><input id="novo-limite" type="number" step="0.01" placeholder="Deixa em branco para não haver limite"></div>
+          <div class="pf"><label for="novo-limite">Limite de crédito (opcional)</label><input id="novo-limite" type="number" step="1" placeholder="Deixa em branco para não haver limite"></div>
           <div class="btn-row"><button onclick="criarPessoa()">Registar pessoa</button></div>
         </div>
       </div>
@@ -525,7 +532,7 @@
         <div class="float-menu">
           <h2>Novo empréstimo</h2>
           <label for="valor">Valor</label>
-          <input id="valor" type="number" step="0.01" placeholder="10000.00">
+          <input id="valor" type="number" step="1" placeholder="10000">
           <div class="row2">
             <div>
               <label for="taxa">Taxa de juro anual (%)</label>
@@ -573,7 +580,7 @@
           <h2>Empréstimos deste NIF</h2>
           <div class="kpis">
             <div class="kpi"><div class="k-label">Empréstimos</div><div class="k-value" id="kpi-emp-n">0</div></div>
-            <div class="kpi"><div class="k-label">Total emprestado</div><div class="k-value" id="kpi-emp-total">0,00</div></div>
+            <div class="kpi"><div class="k-label">Total emprestado</div><div class="k-value" id="kpi-emp-total">0</div></div>
             <div class="kpi"><div class="k-label">Taxa média anual</div><div class="k-value" id="kpi-emp-taxa">0,00%</div></div>
           </div>
           <table id="tabela-emprestimos">
@@ -586,7 +593,7 @@
         <section class="panel" id="mapa-section" style="display:none">
           <h2>Mapa de amortização <small id="mapa-sub"></small></h2>
           <div class="progress-wrap">
-            <div class="progress-head"><span id="mapa-progress-label"></span><span>Capital em dívida: <strong id="mapa-divida">0,00</strong></span></div>
+            <div class="progress-head"><span id="mapa-progress-label"></span><span>Capital em dívida: <strong id="mapa-divida">0</strong></span></div>
             <div class="progress"><i id="mapa-progress-bar"></i></div>
           </div>
           <div class="btn-row gestao-only" id="emp-acoes">
@@ -599,7 +606,7 @@
             <hr class="divider">
             <div class="empty">A editar este empréstimo — o mapa é recalculado ao gravar. Se já houver valores recebidos, são redistribuídos pelas primeiras prestações do novo mapa (os movimentos do banco não mudam).</div>
             <label for="edit-emp-valor">Valor</label>
-            <input id="edit-emp-valor" type="number" step="0.01">
+            <input id="edit-emp-valor" type="number" step="1">
             <div class="row2">
               <div><label for="edit-emp-taxa">Taxa de juro anual (%)</label><input id="edit-emp-taxa" type="number" step="0.01"></div>
               <div><label for="edit-emp-prestacoes">Nº de prestações</label><input id="edit-emp-prestacoes" type="number"></div>
@@ -634,7 +641,7 @@
       <h2>Todos os empréstimos concedidos</h2>
       <div class="kpis">
         <div class="kpi"><div class="k-label">Empréstimos</div><div class="k-value" id="kpi-todos-n">0</div></div>
-        <div class="kpi"><div class="k-label">Total concedido</div><div class="k-value" id="kpi-todos-total">0,00</div></div>
+        <div class="kpi"><div class="k-label">Total concedido</div><div class="k-value" id="kpi-todos-total">0</div></div>
         <div class="kpi"><div class="k-label">Prestações pagas</div><div class="k-value" id="kpi-todos-pagas">0</div></div>
         <div class="kpi"><div class="k-label">Prestações atrasadas</div><div class="k-value" id="kpi-todos-atrasadas">0</div></div>
         <div class="kpi"><div class="k-label">Prestações por pagar</div><div class="k-value" id="kpi-todos-porpagar">0</div></div>
@@ -654,9 +661,17 @@
         <div><label for="filtro-data-de">Início de</label><input id="filtro-data-de" type="date" onchange="aplicarFiltrosLista()"></div>
         <div><label for="filtro-data-ate">Início até</label><input id="filtro-data-ate" type="date" onchange="aplicarFiltrosLista()"></div>
         <button class="ghost" onclick="limparFiltrosLista()">Limpar filtros</button>
+        <div class="filter-actions">
+          <button class="btn-icon btn-pdf" onclick="exportarListaPdf()" title="Exportar para PDF" aria-label="Exportar para PDF">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2.5H6a1 1 0 0 0-1 1v17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5z"/><path d="M14 2.5v5h5"/><text x="12" y="17.2" text-anchor="middle" font-size="6.4" font-weight="800" fill="#fff" stroke="none" font-family="Arial,sans-serif">PDF</text></svg>
+          </button>
+          <button class="btn-icon btn-excel" onclick="exportarListaExcel()" title="Exportar para Excel" aria-label="Exportar para Excel">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2.5H6a1 1 0 0 0-1 1v17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5z"/><path d="M14 2.5v5h5"/><path d="M9 11.5l6 7M15 11.5l-6 7"/></svg>
+          </button>
+        </div>
       </div>
       <table id="tabela-todos-emprestimos">
-        <thead><tr><th>NIF</th><th>Nome</th><th>Início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th>Estado</th></tr></thead>
+        <thead><tr><th>NIF</th><th>Nome</th><th>Início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th class="num">Valor pago</th><th class="num">Saldo</th><th>Estado</th></tr></thead>
         <tbody></tbody>
       </table>
       <div class="empty" id="todos-emprestimos-vazio" style="display:none">Ainda não há empréstimos registados.</div>
@@ -682,7 +697,7 @@
           <h2>Saldo inicial</h2>
           <div id="saldo-inicial-form" class="gestao-only">
             <label for="si-valor">Valor do saldo inicial</label>
-            <input id="si-valor" type="number" step="0.01" placeholder="0.00">
+            <input id="si-valor" type="number" step="1" placeholder="0">
             <label for="si-data">Data</label>
             <input id="si-data" type="date">
             <button data-fm-autoclose onclick="definirSaldoInicial()">Definir saldo inicial</button>
@@ -700,7 +715,7 @@
             <option value="SAIDA">Saída</option>
           </select>
           <label for="mov-valor">Valor</label>
-          <input id="mov-valor" type="number" step="0.01" placeholder="0.00">
+          <input id="mov-valor" type="number" step="1" placeholder="0">
           <label for="mov-data">Data</label>
           <input id="mov-data" type="date">
           <label for="mov-desc">Descrição</label>
@@ -732,7 +747,7 @@
         <label for="ch-beneficiario">Beneficiário</label>
         <input id="ch-beneficiario" placeholder="Nome do beneficiário">
         <label for="ch-valor">Valor</label>
-        <input id="ch-valor" type="number" step="0.01" placeholder="0.00">
+        <input id="ch-valor" type="number" step="1" placeholder="0">
         <label for="ch-data">Data de emissão</label>
         <input id="ch-data" type="date">
         <label for="ch-motivo">Motivo</label>
@@ -769,7 +784,7 @@
             </div>
             <div>
               <label for="pm-valor">Valor pago (opcional)</label>
-              <input id="pm-valor" type="number" step="0.01" placeholder="em branco = o que falta da prestação">
+              <input id="pm-valor" type="number" step="1" placeholder="em branco = o que falta da prestação">
             </div>
           </div>
           <button data-fm-autoclose onclick="registarPagamentoManual()">Registar pagamento</button>
@@ -891,7 +906,7 @@
         <h2>Simulador de empréstimo</h2>
         <div class="empty">Calcula um mapa de amortização sem gravar nada — útil para responder "e se for X em Y prestações?" na hora.</div>
         <label for="sim-valor">Valor</label>
-        <input id="sim-valor" type="number" step="0.01" placeholder="10000.00">
+        <input id="sim-valor" type="number" step="1" placeholder="10000">
         <div class="row2">
           <div><label for="sim-taxa">Taxa de juro anual (%)</label><input id="sim-taxa" type="number" step="0.01" placeholder="12.5"></div>
           <div><label for="sim-prestacoes">Nº de prestações</label><input id="sim-prestacoes" type="number" placeholder="24"></div>
@@ -916,9 +931,9 @@
     <section class="panel" id="sim-resultado" style="display:none">
         <h2>Resultado da simulação</h2>
         <div class="kpis">
-          <div class="kpi"><div class="k-label">Prestação fixa</div><div class="k-value" id="sim-prestacao-fixa">0,00</div></div>
-          <div class="kpi"><div class="k-label">Total a pagar</div><div class="k-value" id="sim-total-pagar">0,00</div></div>
-          <div class="kpi"><div class="k-label">Total de juros</div><div class="k-value" id="sim-total-juros">0,00</div></div>
+          <div class="kpi"><div class="k-label">Prestação fixa</div><div class="k-value" id="sim-prestacao-fixa">0</div></div>
+          <div class="kpi"><div class="k-label">Total a pagar</div><div class="k-value" id="sim-total-pagar">0</div></div>
+          <div class="kpi"><div class="k-label">Total de juros</div><div class="k-value" id="sim-total-juros">0</div></div>
         </div>
         <table>
           <thead><tr><th>#</th><th>Vencimento</th><th class="num">Prestação</th><th class="num">Juro</th><th class="num">Capital</th><th class="num">Em dívida</th></tr></thead>
@@ -1137,7 +1152,7 @@ function log(msg, isErr){
   if (msg) toast(msg, isErr ? 'err' : 'ok');
 }
 function fmt(n){
-  return Number(n).toLocaleString('pt-PT', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return Math.round(Number(n)).toLocaleString('pt-PT', {minimumFractionDigits:0, maximumFractionDigits:0, useGrouping:'always'});
 }
 function hoje(){ return new Date().toISOString().slice(0,10); }
 
@@ -1206,7 +1221,7 @@ function tresDigitos(n){
 }
 
 function numeroPorExtenso(valor){
-  valor = Math.round(valor*100)/100;
+  valor = Math.round(valor);
   const inteiro = Math.floor(valor + 1e-9);
   const centavos = Math.round((valor - inteiro) * 100);
 
@@ -1533,7 +1548,7 @@ async function criarPessoa(){
   const nome = document.getElementById('novo-nome').value.trim();
   const contacto = document.getElementById('novo-contacto').value.trim();
   const limiteRaw = document.getElementById('novo-limite').value;
-  const limite = limiteRaw === '' ? null : parseFloat(limiteRaw);
+  const limite = limiteRaw === '' ? null : Math.round(parseFloat(limiteRaw));
   if (!nome){ log('Indica o nome.', true); return; }
 
   const { data, error } = await sb.from('pessoas').insert({ nif, nome, contacto: contacto || null, limite_credito: limite }).select().single();
@@ -1564,7 +1579,7 @@ async function guardarEdicaoPessoa(){
   const nome = document.getElementById('edit-nome').value.trim();
   const contacto = document.getElementById('edit-contacto').value.trim();
   const limiteRaw = document.getElementById('edit-limite').value;
-  const limite = limiteRaw === '' ? null : parseFloat(limiteRaw);
+  const limite = limiteRaw === '' ? null : Math.round(parseFloat(limiteRaw));
   if (!nome){ log('Indica o nome.', true); return; }
 
   const { data, error } = await sb.from('pessoas')
@@ -1589,6 +1604,16 @@ function badgeClasseEmprestimo(estado){
   return badgeClassePrestacao(estado);
 }
 
+async function buscarTodasPrestacoes(){
+  const todas = [];
+  for (let de = 0; ; de += 1000){
+    const { data, error } = await sb.from('mapa_amortizacao').select('*').order('id').range(de, de + 999);
+    if (error) return { error };
+    todas.push(...data);
+    if (data.length < 1000) break;
+  }
+  return { data: todas };
+}
 async function carregarTodosEmprestimos(){
   if (!requireConn()) return;
   const { data, error } = await sb.from('emprestimos')
@@ -1596,8 +1621,7 @@ async function carregarTodosEmprestimos(){
     .order('data_inicio', { ascending: false });
   if (error){ log('Erro: ' + error.message, true); return; }
 
-  const { data: prest, error: errPrest } = await sb.from('mapa_amortizacao')
-    .select('emprestimo_id, estado, valor_prestacao, data_vencimento');
+  const { data: prest, error: errPrest } = await buscarTodasPrestacoes();
 
   // agrupa as prestações por empréstimo, para saber o estado real de cada um
   const porEmprestimo = new Map();
@@ -1624,28 +1648,35 @@ async function carregarTodosEmprestimos(){
   aplicarFiltrosLista();
 }
 
-function aplicarFiltrosLista(){
-  const data = ultimoTodosEmprestimos;
-  const porEmprestimo = ultimoPorEmprestimo;
+// empréstimos visíveis (com os filtros atuais) e os valores calculados de cada um
+function linhasListaFiltradas(){
+  const data = ultimoTodosEmprestimos || [];
+  const porEmprestimo = ultimoPorEmprestimo || new Map();
   const fEstado = document.getElementById('filtro-estado').value;
   const fDe = document.getElementById('filtro-data-de').value;
   const fAte = document.getElementById('filtro-data-ate').value;
 
-  const filtrados = data.filter(emp => {
-    if (fDe && emp.data_inicio < fDe) return false;
-    if (fAte && emp.data_inicio > fAte) return false;
-    if (fEstado){
-      const estadoReal = estadoFinalEmprestimo(emp, porEmprestimo.get(emp.id) || []);
-      if (estadoReal !== fEstado) return false;
-    }
-    return true;
+  const out = [];
+  data.forEach(emp => {
+    if (fDe && emp.data_inicio < fDe) return;
+    if (fAte && emp.data_inicio > fAte) return;
+    const linhas = porEmprestimo.get(emp.id) || [];
+    const estado = estadoFinalEmprestimo(emp, linhas);
+    if (fEstado && estado !== fEstado) return;
+    const pago = arred(linhas.reduce((s, l) => s + valorPagoPrestacao(l), 0));
+    const total = linhas.reduce((s, l) => s + Number(l.valor_prestacao), 0);
+    const saldo = (estado === 'ANULADO' || estado === 'LIQUIDADO') ? 0 : arred(Math.max(0, total - pago));
+    out.push({ emp, nome: emp.pessoas ? emp.pessoas.nome : '', estado, pago, saldo });
   });
-
+  return out;
+}
+function aplicarFiltrosLista(){
+  const filtrados = linhasListaFiltradas();
   const tbody = document.querySelector('#tabela-todos-emprestimos tbody');
   tbody.innerHTML = '';
   document.getElementById('todos-emprestimos-vazio').style.display = filtrados.length ? 'none' : 'block';
 
-  filtrados.forEach(emp => {
+  filtrados.forEach(({ emp, nome, estado, pago, saldo }) => {
     const tr = document.createElement('tr');
     tr.className = 'loan-row';
     tr.onclick = () => {
@@ -1653,11 +1684,99 @@ function aplicarFiltrosLista(){
       mudarVista('emprestimos');
       procurarPessoa().then(() => verMapa(emp));
     };
-    const nome = emp.pessoas ? emp.pessoas.nome : '';
-    const estadoReal = estadoFinalEmprestimo(emp, porEmprestimo.get(emp.id) || []);
-    tr.innerHTML = `<td>${emp.nif}</td><td>${nome}</td><td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td><span class="badge ${badgeClasseEmprestimo(estadoReal)}">${estadoReal}</span></td>`;
+    tr.innerHTML = `<td>${emp.nif}</td><td>${nome}</td><td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td class="num">${fmt(pago)}</td><td class="num">${fmt(saldo)}</td><td><span class="badge ${badgeClasseEmprestimo(estado)}">${estado}</span></td>`;
     tbody.appendChild(tr);
   });
+}
+
+/* ---------- exportar a lista de empréstimos (Excel / PDF) ---------- */
+function dadosExportLista(){
+  return linhasListaFiltradas().map(l => ({
+    nif: String(l.emp.nif), nome: l.nome, inicio: l.emp.data_inicio,
+    valor: Math.round(Number(l.emp.valor_emprestimo)), taxa: Number(l.emp.taxa_juro_anual), prestacoes: l.emp.numero_prestacoes,
+    pago: l.pago, saldo: l.saldo, estado: l.estado
+  }));
+}
+function exportarListaExcel(){
+  const d = dadosExportLista();
+  if (!d.length){ log('Não há empréstimos para exportar.', true); return; }
+  const aoa = [['NIF', 'Nome', 'Início', 'Valor', 'Taxa', 'Prestações', 'Valor Pago', 'Saldo', 'Estado'],
+    ...d.map(x => [x.nif, x.nome, x.inicio, x.valor, x.taxa, x.prestacoes, x.pago, x.saldo, x.estado])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 11 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
+  for (let i = 2; i <= d.length + 1; i++){
+    ['D', 'G', 'H'].forEach(c => { if (ws[c + i]) ws[c + i].z = '#,##0'; });
+    if (ws['E' + i]) ws['E' + i].z = '0.0#"%"';
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Empréstimos');
+  XLSX.writeFile(wb, 'lista_emprestimos_' + hoje() + '.xlsx');
+  log('Exportados ' + d.length + ' empréstimo(s) para Excel.');
+}
+function descricaoFiltrosLista(){
+  const sel = document.getElementById('filtro-estado');
+  const partes = [];
+  if (sel.value) partes.push('Estado: ' + sel.options[sel.selectedIndex].text);
+  const de = document.getElementById('filtro-data-de').value, ate = document.getElementById('filtro-data-ate').value;
+  if (de) partes.push('Início de ' + de);
+  if (ate) partes.push('Início até ' + ate);
+  return partes.length ? partes.join(' · ') : 'Sem filtros';
+}
+function exportarListaPdf(){
+  const d = dadosExportLista();
+  if (!d.length){ log('Não há empréstimos para exportar.', true); return; }
+  const sp = s => String(s).replace(/[\u00a0\u202f]/g, ' ');
+  const cab = ['NIF', 'Nome', 'Início', 'Valor', 'Taxa', 'Prestações', 'Valor pago', 'Saldo', 'Estado'];
+  const corpo = d.map(x => [x.nif, x.nome, x.inicio, sp(fmt(x.valor)), x.taxa + '%', String(x.prestacoes), sp(fmt(x.pago)), sp(fmt(x.saldo)), x.estado]);
+  const soma = k => d.reduce((s, x) => s + x[k], 0);
+  const rodape = ['Total', d.length + ' empréstimo(s)', '', sp(fmt(soma('valor'))), '', '', sp(fmt(soma('pago'))), sp(fmt(soma('saldo'))), ''];
+  const titulo = 'Lista de empréstimos';
+  const sub = descricaoFiltrosLista() + '  ·  Gerado em ' + hoje();
+
+  const jsPDF = window.jspdf && window.jspdf.jsPDF;
+  const doc = jsPDF ? new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' }) : null;
+  if (!doc || typeof doc.autoTable !== 'function'){ imprimirListaHtml(titulo, sub, cab, corpo, rodape); return; }
+
+  const cores = { PAGO: [5, 150, 105], ATIVO: [5, 150, 105], LIQUIDADO: [5, 150, 105], PENDENTE: [180, 83, 9], ATRASADO: [225, 29, 72], ANULADO: [225, 29, 72] };
+  doc.setFontSize(15); doc.setTextColor(38, 91, 136); doc.text(titulo, 40, 42);
+  doc.setFontSize(9); doc.setTextColor(100); doc.text(sub, 40, 58);
+  doc.autoTable({
+    head: [cab], body: corpo, foot: [rodape], startY: 72, theme: 'striped',
+    styles: { fontSize: 8.5, cellPadding: 3.5, textColor: 30 },
+    headStyles: { fillColor: [38, 91, 136], textColor: 255, fontStyle: 'bold' },
+    footStyles: { fillColor: [228, 237, 245], textColor: 30, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [247, 248, 250] },
+    columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' } },
+    didParseCell: h => {
+      if ((h.column.index === 3 || h.column.index === 4 || h.column.index === 5 || h.column.index === 6 || h.column.index === 7) && h.section !== 'body') h.cell.styles.halign = 'right';
+      if (h.section === 'body' && h.column.index === 8 && cores[h.cell.raw]){ h.cell.styles.textColor = cores[h.cell.raw]; h.cell.styles.fontStyle = 'bold'; }
+    },
+    didDrawPage: h => {
+      doc.setFontSize(8); doc.setTextColor(120);
+      doc.text('Página ' + doc.internal.getNumberOfPages(), doc.internal.pageSize.getWidth() - 40, doc.internal.pageSize.getHeight() - 20, { align: 'right' });
+    }
+  });
+  doc.save('lista_emprestimos_' + hoje() + '.pdf');
+  log('Exportados ' + d.length + ' empréstimo(s) para PDF.');
+}
+// alternativa se o gerador de PDF não carregar: abre a impressão (guardar como PDF)
+function imprimirListaHtml(titulo, sub, cab, corpo, rodape){
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const num = i => i >= 3 && i <= 7;
+  const linha = (cels, tag) => '<tr>' + cels.map((c, i) => '<' + tag + (num(i) ? ' class="n"' : '') + '>' + esc(c) + '</' + tag + '>').join('') + '</tr>';
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(titulo) + '</title><style>' +
+    '@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#1c1f26}h1{font-size:18px;margin:0 0 4px;color:#265b88}' +
+    'p{font-size:11px;color:#667;margin:0 0 12px}table{width:100%;border-collapse:collapse;font-size:11px}' +
+    'th{background:#265b88;color:#fff;text-align:left;padding:5px 6px}td{padding:4px 6px;border-bottom:1px solid #e2e4ea}' +
+    '.n{text-align:right}tbody tr:nth-child(even){background:#f7f8fa}tfoot td{font-weight:700;background:#e4edf5}</style></head><body>' +
+    '<h1>' + esc(titulo) + '</h1><p>' + esc(sub) + '</p><table><thead>' + linha(cab, 'th') + '</thead><tbody>' +
+    corpo.map(c => linha(c, 'td')).join('') + '</tbody><tfoot>' + linha(rodape, 'td') + '</tfoot></table></body></html>';
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300);
+  log('Não foi possível gerar o PDF diretamente (sem ligação ao gerador). Escolhe "Guardar como PDF" na janela de impressão.');
 }
 
 function limparFiltrosLista(){
@@ -1703,16 +1822,17 @@ async function carregarEmprestimos(nif){
 function gerarLinhasMapa(valor, taxaAnual, nPrestacoes, dataInicioStr, periodicidade){
   const divisor = periodicidade === 'TRIMESTRAL' ? 4 : (periodicidade === 'ANUAL' ? 1 : 12);
   const taxaPeriodica = (taxaAnual / 100) / divisor;
-  let prestacaoFixa = taxaPeriodica === 0 ? valor / nPrestacoes : valor * taxaPeriodica / (1 - Math.pow(1 + taxaPeriodica, -nPrestacoes));
+  valor = Math.round(valor);
+  const prestacaoFixa = Math.round(taxaPeriodica === 0 ? valor / nPrestacoes : valor * taxaPeriodica / (1 - Math.pow(1 + taxaPeriodica, -nPrestacoes)));
   const linhas = [];
   let saldo = valor;
   const dataInicio = new Date(dataInicioStr + 'T00:00:00');
   for (let i = 1; i <= nPrestacoes; i++){
-    let juro = Math.round(saldo * taxaPeriodica * 100) / 100;
-    let capital = Math.round((prestacaoFixa - juro) * 100) / 100;
+    const juro = Math.round(saldo * taxaPeriodica);
+    let capital = Math.min(prestacaoFixa - juro, saldo);
     let prestacao = prestacaoFixa;
-    if (i === nPrestacoes){ capital = saldo; prestacao = Math.round((capital + juro) * 100) / 100; }
-    saldo = Math.round((saldo - capital) * 100) / 100;
+    if (i === nPrestacoes){ capital = saldo; prestacao = capital + juro; }   // a última acerta as diferenças de arredondamento
+    saldo = saldo - capital;
     const venc = new Date(dataInicio);
     if (periodicidade === 'TRIMESTRAL') venc.setMonth(venc.getMonth() + i*3);
     else if (periodicidade === 'ANUAL') venc.setFullYear(venc.getFullYear() + i);
@@ -1726,11 +1846,11 @@ function limparSimulacao(){
   ['sim-valor','sim-taxa','sim-prestacoes','sim-data'].forEach(id => { document.getElementById(id).value = ''; });
   document.getElementById('sim-periodicidade').value = 'MENSAL';
   document.getElementById('sim-body').innerHTML = '';
-  ['sim-prestacao-fixa','sim-total-pagar','sim-total-juros'].forEach(id => { document.getElementById(id).textContent = '0,00'; });
+  ['sim-prestacao-fixa','sim-total-pagar','sim-total-juros'].forEach(id => { document.getElementById(id).textContent = '0'; });
   document.getElementById('sim-resultado').style.display = 'none';
 }
 function simular(){
-  const valor = parseFloat(document.getElementById('sim-valor').value);
+  const valor = Math.round(parseFloat(document.getElementById('sim-valor').value));
   const taxa = parseFloat(document.getElementById('sim-taxa').value);
   const nPrestacoes = parseInt(document.getElementById('sim-prestacoes').value, 10);
   const periodicidade = document.getElementById('sim-periodicidade').value;
@@ -1807,7 +1927,7 @@ async function carregarResumoMensal(){
 async function criarEmprestimo(){
   if (!requireGestao()) return;
   if (!pessoaAtual){ log('Procura ou regista uma pessoa primeiro.', true); return; }
-  const valor = parseFloat(document.getElementById('valor').value);
+  const valor = Math.round(parseFloat(document.getElementById('valor').value));
   const taxa = parseFloat(document.getElementById('taxa').value);
   const nPrestacoes = parseInt(document.getElementById('prestacoes').value, 10);
   const periodicidade = document.getElementById('periodicidade').value;
@@ -1967,14 +2087,14 @@ async function importarEmprestimosExistentes(){
       let nif = String(r[col.nif] ?? '').trim();
       let nome = col.nome >= 0 ? String(r[col.nome] ?? '').trim() : '';
       const dataInicio = dataCelula(r[col.data]);
-      const valor = numeroCelula(r[col.valor]);
+      const valor = inteiro(numeroCelula(r[col.valor]));
       let taxa = numeroCelula(r[col.taxa]);
       const celTaxa = sheet[XLSX.utils.encode_cell({ r: linha0 + i, c: col.taxa })];
       if (celTaxa && typeof celTaxa.v === 'number' && /%/.test(celTaxa.w || '')) taxa = celTaxa.v * 100;
       const nPrestacoes = Math.round(numeroCelula(r[col.n]));
       let periodicidade = col.per >= 0 ? normCab(r[col.per]).toUpperCase() : '';
       if (!periodicidade) periodicidade = 'MENSAL';
-      let valorPago = col.pago >= 0 ? numeroCelula(r[col.pago]) : 0;
+      let valorPago = col.pago >= 0 ? inteiro(numeroCelula(r[col.pago])) : 0;
       if (isNaN(valorPago)) valorPago = 0;
 
       // NIF/Nome vazios (células fundidas): herda da linha anterior
@@ -2022,9 +2142,9 @@ async function importarEmprestimosExistentes(){
       if (await temColunaValorPago()){
         if (restante > 0.01){
           const prox = linhas.find(l => l.estado !== 'PAGO');
-          if (prox){ prox.valor_pago = r2(restante); prox.data_pagamento = prox.data_vencimento; }
+          if (prox){ prox.valor_pago = arred(restante); prox.data_pagamento = prox.data_vencimento; }
         }
-        linhas.forEach(l => { if (l.valor_pago === undefined) l.valor_pago = l.estado === 'PAGO' ? r2(l.valor_prestacao) : 0; });
+        linhas.forEach(l => { if (l.valor_pago === undefined) l.valor_pago = l.estado === 'PAGO' ? arred(l.valor_prestacao) : 0; });
       }
       const mapaLinhas = linhas.map(l => ({ ...l, emprestimo_id: emp.id }));
       const { error: errMapa } = await sb.from('mapa_amortizacao').insert(mapaLinhas);
@@ -2118,7 +2238,7 @@ function mostrarEditarEmprestimo(){
 
 async function guardarEdicaoEmprestimo(){
   if (!requireGestao() || !emprestimoAtual) return;
-  const valor = parseFloat(document.getElementById('edit-emp-valor').value);
+  const valor = Math.round(parseFloat(document.getElementById('edit-emp-valor').value));
   const taxa = parseFloat(document.getElementById('edit-emp-taxa').value);
   const nPrestacoes = parseInt(document.getElementById('edit-emp-prestacoes').value, 10);
   const periodicidade = document.getElementById('edit-emp-periodicidade').value;
@@ -2126,7 +2246,7 @@ async function guardarEdicaoEmprestimo(){
   if (!valor || !nPrestacoes || !dataInicio || isNaN(taxa)){ log('Preenche todos os campos.', true); return; }
 
   const antigas = mapaAtualLinhas.slice();
-  const pagoTotal = r2(antigas.reduce((s, r) => s + valorPagoPrestacao(r), 0));
+  const pagoTotal = arred(antigas.reduce((s, r) => s + valorPagoPrestacao(r), 0));
   const texto = pagoTotal > 0.004
     ? 'O mapa atual vai ser apagado e substituído por um novo. Os ' + fmt(pagoTotal) + ' já recebidos são redistribuídos pelas primeiras prestações do novo mapa; os movimentos do banco não são alterados.'
     : 'O mapa atual deste empréstimo vai ser apagado e substituído por um novo, calculado com estes valores.';
@@ -2153,10 +2273,10 @@ async function guardarEdicaoEmprestimo(){
     const data = datasPagas[Math.min(k, datasPagas.length - 1)] || l.data_vencimento;
     if (restante + 0.01 >= l.valor_prestacao){
       l.estado = 'PAGO'; l.data_pagamento = data;
-      if (temColuna) l.valor_pago = r2(l.valor_prestacao);
-      restante = r2(restante - l.valor_prestacao); k++;
+      if (temColuna) l.valor_pago = arred(l.valor_prestacao);
+      restante = arred(restante - l.valor_prestacao); k++;
     } else {
-      if (temColuna){ l.valor_pago = r2(restante); l.data_pagamento = data; restante = 0; }
+      if (temColuna){ l.valor_pago = arred(restante); l.data_pagamento = data; restante = 0; }
       break;
     }
   }
@@ -2182,9 +2302,9 @@ async function liquidarAntecipadamente(){
   if (!pendentes.length){ log('Este empréstimo já não tem prestações por pagar.', true); return; }
   const capitalEmFalta = pendentes.reduce((s, r) => s + Number(r.valor_capital), 0);
 
-  const valorStr = prompt('Valor a receber para liquidar o empréstimo (capital em falta: ' + fmt(capitalEmFalta) + '):', capitalEmFalta.toFixed(2));
+  const valorStr = prompt('Valor a receber para liquidar o empréstimo (capital em falta: ' + fmt(capitalEmFalta) + '):', String(Math.round(capitalEmFalta)));
   if (valorStr === null) return;
-  const valorLiquidacao = parseFloat(valorStr.replace(',', '.'));
+  const valorLiquidacao = Math.round(parseFloat(valorStr.replace(',', '.')));
   if (isNaN(valorLiquidacao) || valorLiquidacao <= 0){ log('Valor inválido.', true); return; }
 
   if (!await confirmar('Liquidar empréstimo?', 'Todas as ' + pendentes.length + ' prestações por pagar ficam marcadas como pagas, é lançada uma entrada de ' + fmt(valorLiquidacao) + ' no banco, e o empréstimo passa a LIQUIDADO.', 'Confirmar liquidação')) return;
@@ -2241,7 +2361,9 @@ async function anularCheque(idCheque){
 
 /* ---------- LANÇAMENTO DE PAGAMENTOS: manual e por Excel ---------- */
 /* ---------- pagamentos: valores pagos, parciais e anulação ---------- */
-const r2 = n => Math.round(Number(n) * 100) / 100;
+// já não se usam cêntimos: todos os valores são arredondados à unidade
+const arred = n => Math.round(Number(n));
+const inteiro = v => (v === null || v === undefined || isNaN(v)) ? NaN : Math.round(v);
 const SQL_VALOR_PAGO = 'alter table mapa_amortizacao add column if not exists valor_pago numeric default 0;';
 const MSG_SEM_COLUNA = 'Para registar pagamentos parciais é preciso criar a coluna valor_pago no Supabase (SQL Editor): ' + SQL_VALOR_PAGO;
 
@@ -2258,10 +2380,10 @@ function valorPagoPrestacao(row){
   if (vp > 0.004) return vp;
   return row.estado === 'PAGO' ? Number(row.valor_prestacao) : 0;
 }
-// quanto falta pagar (até 1 cêntimo conta como pago)
+// quanto falta pagar (menos de meia unidade conta como pago)
 function faltaPrestacao(row){
   const f = Number(row.valor_prestacao) - valorPagoPrestacao(row);
-  return f <= 0.01 ? 0 : r2(f);
+  return f < 0.5 ? 0 : arred(f);
 }
 
 // Aplica um pagamento a partir de uma prestação; o excedente passa às seguintes do mesmo empréstimo.
@@ -2271,7 +2393,7 @@ async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
     .neq('estado', 'PAGO').order('numero_prestacao');
   if (re.error) return { erro: re.error.message };
   const fila = (re.data || []).filter(r => r.numero_prestacao >= rowInicial.numero_prestacao);
-  let restante = r2(valor);
+  let restante = arred(valor);
   const aplicados = [];
   for (const r of fila){
     if (restante <= 0.004) break;
@@ -2280,7 +2402,7 @@ async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
     const falta = faltaPrestacao(r);
     if (falta === 0){   // já coberta: só fecha a prestação
       const fecha = { estado:'PAGO', data_pagamento: dataPag };
-      if (temColuna) fecha.valor_pago = r2(Math.max(ja, Number(r.valor_prestacao)));
+      if (temColuna) fecha.valor_pago = arred(Math.max(ja, Number(r.valor_prestacao)));
       const uf = await sb.from('mapa_amortizacao').update(fecha).eq('id', r.id);
       if (uf.error) return { erro: uf.error.message, aplicados };
       continue;
@@ -2292,15 +2414,15 @@ async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
       break;
     }
     const patch = completa ? { estado:'PAGO', data_pagamento: dataPag } : { data_pagamento: dataPag };
-    if (temColuna) patch.valor_pago = r2(ja + paga);
+    if (temColuna) patch.valor_pago = arred(ja + paga);
     const up = await sb.from('mapa_amortizacao').update(patch).eq('id', r.id);
     if (up.error) return { erro: up.error.message, aplicados };
     await sb.from('movimentos_banco').insert({
-      tipo:'ENTRADA', valor: r2(paga), data: dataPag,
+      tipo:'ENTRADA', valor: arred(paga), data: dataPag,
       descricao: 'Pagamento prestação nº ' + r.numero_prestacao + ' (empréstimo ' + r.emprestimo_id + ')' + (completa ? '' : ' — parcial') + (sufixoDesc || '')
     });
-    aplicados.push({ row: r, valor: r2(paga), completa, faltaApos: completa ? 0 : r2(falta - paga) });
-    restante = r2(restante - paga);
+    aplicados.push({ row: r, valor: arred(paga), completa, faltaApos: completa ? 0 : arred(falta - paga) });
+    restante = arred(restante - paga);
     if (!completa) break;
   }
   return { aplicados, sobra: restante };
@@ -2318,7 +2440,7 @@ function descreverPagamento(res){
 async function aplicarPagamentoPessoa(nif, opcoes, valor, dataPag, sufixoDesc){
   const ordenadas = [...opcoes].sort((a, b) =>
     a.row.data_vencimento < b.row.data_vencimento ? -1 : a.row.data_vencimento > b.row.data_vencimento ? 1 : a.emp.id - b.emp.id);
-  let restante = r2(valor);
+  let restante = arred(valor);
   const todos = [];
   for (const o of ordenadas){                       // ronda 1: a próxima prestação de cada empréstimo
     if (restante <= 0.004) break;
@@ -2327,7 +2449,7 @@ async function aplicarPagamentoPessoa(nif, opcoes, valor, dataPag, sufixoDesc){
     const res = await aplicarPagamento(o.row, Math.min(restante, falta), dataPag, sufixoDesc);
     if (res.erro) return { erro: res.erro, aplicados: todos };
     todos.push(...res.aplicados);
-    restante = r2(restante - Math.min(restante, falta) + (res.sobra || 0));
+    restante = arred(restante - Math.min(restante, falta) + (res.sobra || 0));
   }
   for (const o of ordenadas){                       // ronda 2: o resto segue pelas prestações seguintes
     if (restante <= 0.004) break;
@@ -2346,9 +2468,9 @@ async function pagarParteApp(idPrestacao){
   const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
   if (error){ log('Erro: ' + error.message, true); return; }
   const falta = faltaPrestacao(row);
-  const txt = prompt('Valor recebido (em falta nesta prestação: ' + fmt(falta) + '):', falta.toFixed(2));
+  const txt = prompt('Valor recebido (em falta nesta prestação: ' + fmt(falta) + '):', String(falta));
   if (txt === null) return;
-  const valor = parseFloat(txt.replace(',', '.'));
+  const valor = Math.round(parseFloat(txt.replace(',', '.')));
   if (isNaN(valor) || valor <= 0){ log('Valor inválido.', true); return; }
   if (!await confirmar('Registar pagamento?', 'Vai registar ' + fmt(valor) + ' na prestação nº ' + row.numero_prestacao + ' e lançar a entrada no banco' + (valor + 0.01 < falta ? ' (pagamento parcial).' : '.'), 'Registar')) return;
   const res = await aplicarPagamento(row, valor, hoje(), '');
@@ -2369,7 +2491,7 @@ async function anularPagamento(idPrestacao){
   const sai = await sb.from('movimentos_banco').select('valor').eq('tipo', 'SAIDA').ilike('descricao', 'Anulação pagamento ' + ref + '%');
   if (ent.error || sai.error){ log('Erro: ' + (ent.error || sai.error).message, true); return; }
   const soma = a => (a || []).reduce((s, m) => s + Number(m.valor), 0);
-  const liquido = r2(soma(ent.data) - soma(sai.data));
+  const liquido = arred(soma(ent.data) - soma(sai.data));
 
   const texto = 'A prestação nº ' + row.numero_prestacao + ' volta a ficar por pagar (valor pago: ' + fmt(pago) + '). ' +
     (liquido > 0.004 ? 'Será lançada uma saída de ' + fmt(liquido) + ' no banco para anular a entrada.'
@@ -2444,7 +2566,7 @@ async function registarPagamentoManual(){
   const nif = document.getElementById('pm-nif').value.trim();
   const dataPag = document.getElementById('pm-data').value;
   const valorTxt = document.getElementById('pm-valor').value;
-  const valorOverride = parseFloat(valorTxt);
+  const valorOverride = Math.round(parseFloat(valorTxt));
   if (!nif || !dataPag){ log('Indica o NIF e a data de pagamento.', true); return; }
   if (valorTxt !== '' && (isNaN(valorOverride) || valorOverride <= 0)){ log('Valor pago inválido.', true); return; }
 
@@ -2504,7 +2626,7 @@ async function exportarPendentes(){
     'ID': g.ids.join('+'),
     'NIF': g.nif,
     'Nome': g.nome,
-    'Valor': r2(g.valor),
+    'Valor': arred(g.valor),
     'Data Pagamento': '',
     'Valor Pago': ''
   }));
@@ -2560,7 +2682,7 @@ async function importarPagamentosExcel(){
       const nif = String(r[col.nif] ?? '').trim();
       const idPrest = col.id >= 0 ? parseInt(numeroCelula(r[col.id]), 10) : NaN;
       const empId = col.emp >= 0 ? parseInt(numeroCelula(r[col.emp]), 10) : NaN;
-      const valorPagoCel = col.pago >= 0 ? numeroCelula(r[col.pago]) : NaN;
+      const valorPagoCel = col.pago >= 0 ? inteiro(numeroCelula(r[col.pago])) : NaN;
 
       let row = null, multi = null;
       if (idPrest){                                    // ID da prestação preenchido: tem prioridade
@@ -2579,7 +2701,7 @@ async function importarPagamentosExcel(){
       const informado = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : null;
       let resp;
       if (multi){
-        const devido = r2(multi.reduce((s, o) => s + faltaPrestacao(o.row), 0));
+        const devido = arred(multi.reduce((s, o) => s + faltaPrestacao(o.row), 0));
         resp = await aplicarPagamentoPessoa(nif, multi, informado !== null ? informado : devido, dataPag, ' — importado de Excel');
       } else {
         resp = await aplicarPagamento(row, informado !== null ? informado : faltaPrestacao(row), dataPag, ' — importado de Excel');
@@ -2639,7 +2761,7 @@ async function carregarBanco(){
 
 async function definirSaldoInicial(){
   if (!requireGestao()) return;
-  const valor = parseFloat(document.getElementById('si-valor').value);
+  const valor = Math.round(parseFloat(document.getElementById('si-valor').value));
   const data = document.getElementById('si-data').value;
   if (isNaN(valor) || !data){ log('Indica o valor e a data.', true); return; }
   const { error } = await sb.from('movimentos_banco').insert({ tipo:'SALDO_INICIAL', valor, data, descricao:'Saldo inicial' });
@@ -2652,7 +2774,7 @@ async function definirSaldoInicial(){
 async function registarMovimento(){
   if (!requireGestao()) return;
   const tipo = document.getElementById('mov-tipo').value;
-  const valor = parseFloat(document.getElementById('mov-valor').value);
+  const valor = Math.round(parseFloat(document.getElementById('mov-valor').value));
   const data = document.getElementById('mov-data').value;
   const descricao = document.getElementById('mov-desc').value.trim();
   if (isNaN(valor) || valor <= 0 || !data){ log('Indica um valor válido e a data.', true); return; }
@@ -2685,7 +2807,7 @@ async function emitirCheque(){
   if (!requireGestao()) return;
   const numero = document.getElementById('ch-numero').value.trim();
   const beneficiario = document.getElementById('ch-beneficiario').value.trim();
-  const valor = parseFloat(document.getElementById('ch-valor').value);
+  const valor = Math.round(parseFloat(document.getElementById('ch-valor').value));
   const data = document.getElementById('ch-data').value;
   const motivo = document.getElementById('ch-motivo').value.trim();
   if (!numero || !beneficiario || isNaN(valor) || valor <= 0 || !data){ log('Preenche nº, beneficiário, valor e data.', true); return; }
