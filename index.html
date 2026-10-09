@@ -261,6 +261,7 @@
   #tabela-mapa th:nth-child(9),#tabela-mapa td:nth-child(9){padding-left:26px;}
   #tabela-mapa td:last-child{white-space:nowrap;}
   #tabela-mapa td:last-child button{white-space:nowrap;}
+  #tabela-mapa td:last-child button.ghost{background:#fff;}
 
   #tabela-todos-emprestimos td{padding:4px 10px;line-height:1.35;}
   #tabela-todos-emprestimos tbody tr:nth-child(even){background:color-mix(in srgb,var(--card-2) 65%,var(--card));}
@@ -991,6 +992,22 @@
 </div>
 
 <div id="toasts" aria-live="polite"></div>
+<div class="fm-wrap" id="pagar-wrap">
+  <div class="float-menu" id="pagar-menu">
+    <h2>Pagar prestação</h2>
+    <div class="empty" id="pagar-info"></div>
+    <label for="pagar-valor">Valor a pagar</label>
+    <input id="pagar-valor" type="number" step="1" oninput="atualizarPagarHint()" onkeydown="if(event.key==='Enter')confirmarPagar()">
+    <div class="empty" id="pagar-hint"></div>
+    <label for="pagar-data">Data do pagamento</label>
+    <input id="pagar-data" type="date">
+    <div class="btn-row">
+      <button id="pagar-confirmar" onclick="confirmarPagar()">Confirmar pagamento</button>
+      <button class="ghost" onclick="fmCloseAll()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="modal" role="dialog" aria-modal="true">
   <div class="modal-card">
     <h3 id="modal-title"></h3>
@@ -2196,9 +2213,10 @@ async function verMapa(emp){
     const podeAgir = meuPapel === 'gestao' && (emp.estado || 'ATIVO') === 'ATIVO';
     let acoes = '';
     if (podeAgir){
-      if (estadoReal !== 'PAGO') acoes += `<button class="small ghost" onclick="marcarPago(${row.id})">Marcar pago</button> <button class="small ghost" onclick="pagarParteApp(${row.id})">Pagar parte</button> `;
+      if (estadoReal !== 'PAGO') acoes += `<button class="small ghost" onclick="abrirPagar(${row.id})">Pagar</button> `;
       if (pagoV > 0.004) acoes += `<button class="small ghost" onclick="anularPagamento(${row.id})">Anular pagamento</button>`;
     }
+    if (pagoV > 0.004) acoes += ` <button class="small ghost" onclick="reimprimirRecibo(${row.id})" title="Recibo em PDF" aria-label="Recibo em PDF">${ICONE_PDF}</button>`;
     const faltaV = estadoReal === 'PAGO' ? 0 : falta;
     tr.innerHTML = `<td>${row.numero_prestacao}</td><td>${row.data_vencimento}</td><td class="num">${fmt(row.valor_prestacao)}</td><td class="num">${fmt(row.valor_juro)}</td><td class="num">${fmt(row.valor_capital)}</td><td class="num">${fmt(row.capital_em_divida)}</td><td class="num pago-cell">${fmt(pagoV)}</td><td class="num falta-cell${faltaV === 0 ? ' zero' : ''}">${fmt(faltaV)}</td><td><span class="badge ${badgeClassePrestacao(estadoReal)}">${estadoReal}</span></td><td>${acoes}</td>`;
     tbody.appendChild(tr);
@@ -2212,18 +2230,6 @@ async function verMapa(emp){
   document.getElementById('btn-editar-emp').style.display = (estadoEmp === 'ATIVO') ? '' : 'none';
   document.getElementById('btn-liquidar-emp').style.display = (estadoEmp === 'ATIVO' && haPendentes) ? '' : 'none';
   document.getElementById('btn-anular-emp').style.display = (estadoEmp !== 'ANULADO') ? '' : 'none';
-}
-
-async function marcarPago(idPrestacao){
-  if (!requireGestao()) return;
-  const { data: row, error: errSel } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
-  if (errSel){ log('Erro: ' + errSel.message, true); return; }
-  const falta = faltaPrestacao(row);
-  if (!await confirmar('Marcar prestação como paga?', 'Vai registar o pagamento de ' + fmt(falta) + ' e lançar a entrada correspondente no banco.', 'Marcar como paga')) return;
-  const res = await aplicarPagamento(row, falta, hoje(), '');
-  if (res.erro){ log(res.erro, true); return; }
-  log('Prestação marcada como paga e movimento registado no banco.');
-  verMapa(emprestimoAtual);
 }
 
 function mostrarEditarEmprestimo(){
@@ -2417,11 +2423,11 @@ async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
     if (temColuna) patch.valor_pago = arred(ja + paga);
     const up = await sb.from('mapa_amortizacao').update(patch).eq('id', r.id);
     if (up.error) return { erro: up.error.message, aplicados };
-    await sb.from('movimentos_banco').insert({
+    const mv = await sb.from('movimentos_banco').insert({
       tipo:'ENTRADA', valor: arred(paga), data: dataPag,
       descricao: 'Pagamento prestação nº ' + r.numero_prestacao + ' (empréstimo ' + r.emprestimo_id + ')' + (completa ? '' : ' — parcial') + (sufixoDesc || '')
-    });
-    aplicados.push({ row: r, valor: arred(paga), completa, faltaApos: completa ? 0 : arred(falta - paga) });
+    }).select('id').single();
+    aplicados.push({ row: r, valor: arred(paga), completa, faltaApos: completa ? 0 : arred(falta - paga), movId: (mv && mv.data) ? mv.data.id : null });
     restante = arred(restante - paga);
     if (!completa) break;
   }
@@ -2463,22 +2469,6 @@ async function aplicarPagamentoPessoa(nif, opcoes, valor, dataPag, sufixoDesc){
   return { aplicados: todos, sobra: restante };
 }
 
-async function pagarParteApp(idPrestacao){
-  if (!requireGestao()) return;
-  const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
-  if (error){ log('Erro: ' + error.message, true); return; }
-  const falta = faltaPrestacao(row);
-  const txt = prompt('Valor recebido (em falta nesta prestação: ' + fmt(falta) + '):', String(falta));
-  if (txt === null) return;
-  const valor = Math.round(parseFloat(txt.replace(',', '.')));
-  if (isNaN(valor) || valor <= 0){ log('Valor inválido.', true); return; }
-  if (!await confirmar('Registar pagamento?', 'Vai registar ' + fmt(valor) + ' na prestação nº ' + row.numero_prestacao + ' e lançar a entrada no banco' + (valor + 0.01 < falta ? ' (pagamento parcial).' : '.'), 'Registar')) return;
-  const res = await aplicarPagamento(row, valor, hoje(), '');
-  if (res.erro){ log(res.erro, true); return; }
-  log('Pagamento registado: ' + descreverPagamento(res) + '.');
-  verMapa(emprestimoAtual);
-}
-
 async function anularPagamento(idPrestacao){
   if (!requireGestao()) return;
   const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
@@ -2510,6 +2500,213 @@ async function anularPagamento(idPrestacao){
   log('Pagamento anulado (prestação nº ' + row.numero_prestacao + ').');
   if (pessoaAtual) carregarEmprestimos(pessoaAtual.nif);
   verMapa(emprestimoAtual);
+}
+
+/* ---------- recibos de pagamento ---------- */
+const ICONE_PDF = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#d62839" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px"><path d="M14 2.5H6a1 1 0 0 0-1 1v17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5z"/><path d="M14 2.5v5h5"/><text x="12" y="17.2" text-anchor="middle" font-size="6.4" font-weight="800" fill="#d62839" stroke="none" font-family="Arial,sans-serif">PDF</text></svg>';
+async function buscarPorLotes(tab, col, valores, sel){
+  const out = [];
+  for (let i = 0; i < valores.length; i += 40){
+    const { data, error } = await sb.from(tab).select(sel).in(col, valores.slice(i, i + 40));
+    if (error) throw new Error(error.message);
+    out.push(...data);
+  }
+  return out;
+}
+const numeroRecibo = movId => movId ? 'R' + String(movId).padStart(6, '0') : 'S/N';
+
+// pagamentos = [{ aplicados:[{row,valor,completa,faltaApos,movId}], dataPag }]  ->  um recibo por prestação paga
+async function montarRecibos(pagamentos){
+  const itens = [];
+  pagamentos.forEach(p => p.aplicados.forEach(a => itens.push({ a, data: p.dataPag })));
+  if (!itens.length) return [];
+  const empIds = [...new Set(itens.map(i => i.a.row.emprestimo_id))];
+  const emps = await buscarPorLotes('emprestimos', 'id', empIds, 'id, nif');
+  const nifPorEmp = new Map(emps.map(e => [e.id, e.nif]));
+  const pessoas = await buscarPorLotes('pessoas', 'nif', [...new Set(emps.map(e => e.nif))], 'nif, nome');
+  const nomes = new Map(pessoas.map(x => [String(x.nif), x.nome]));
+  const saldoPorEmp = new Map();
+  (await buscarPorLotes('mapa_amortizacao', 'emprestimo_id', empIds, '*')).forEach(l => {
+    saldoPorEmp.set(l.emprestimo_id, (saldoPorEmp.get(l.emprestimo_id) || 0) + Number(l.valor_prestacao) - valorPagoPrestacao(l));
+  });
+  return itens.map(({ a, data }) => {
+    const nif = String(nifPorEmp.get(a.row.emprestimo_id) ?? '');
+    return {
+      numero: numeroRecibo(a.movId), data, nif, nome: nomes.get(nif) || '',
+      emprestimo: a.row.emprestimo_id, prestacao: a.row.numero_prestacao, vencimento: a.row.data_vencimento,
+      valorPrestacao: arred(a.row.valor_prestacao), valor: a.valor, falta: a.faltaApos, completa: a.completa,
+      saldo: Math.max(0, arred(saldoPorEmp.get(a.row.emprestimo_id) || 0)), segundaVia: false
+    };
+  });
+}
+async function emitirRecibos(pagamentos){
+  try {
+    const recibos = await montarRecibos(pagamentos);
+    if (recibos.length) gerarRecibosPdf(recibos);
+  } catch (e){
+    log('Pagamento registado, mas não foi possível gerar o recibo: ' + (e && e.message ? e.message : e), true);
+  }
+}
+
+async function reimprimirRecibo(idPrestacao){
+  try {
+    const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
+    if (error) throw new Error(error.message);
+    const pagoAtual = valorPagoPrestacao(row);
+    if (pagoAtual < 0.5){ log('Esta prestação não tem pagamentos.', true); return; }
+    const ref = 'prestação nº ' + row.numero_prestacao + ' (empréstimo ' + row.emprestimo_id + ')';
+    const { data: movs, error: errM } = await sb.from('movimentos_banco').select('id, valor, data')
+      .eq('tipo', 'ENTRADA').ilike('descricao', 'Pagamento ' + ref + '%').order('id');
+    if (errM) throw new Error(errM.message);
+    // os pagamentos mais recentes que somam o valor pago atual (ignora os já anulados)
+    let soma = 0; const usados = [];
+    for (let i = (movs || []).length - 1; i >= 0 && soma < pagoAtual - 0.5; i--){ usados.unshift(movs[i]); soma += Number(movs[i].valor); }
+    let pagos = usados.map(m => ({ movId: m.id, valor: arred(m.valor), data: m.data }));
+    if (!pagos.length) pagos = [{ movId: null, valor: arred(pagoAtual), data: row.data_pagamento || hoje() }];
+    let acumulado = 0;
+    const pagamentos = pagos.map(pg => {
+      acumulado += pg.valor;
+      const falta = Math.max(0, arred(Number(row.valor_prestacao) - acumulado));
+      return { dataPag: pg.data, aplicados: [{ row, valor: pg.valor, completa: falta === 0, faltaApos: falta, movId: pg.movId }] };
+    });
+    const recibos = await montarRecibos(pagamentos);
+    recibos.forEach(r => { r.segundaVia = true; });
+    gerarRecibosPdf(recibos);
+  } catch (e){
+    log('Não foi possível gerar o recibo: ' + (e && e.message ? e.message : e), true);
+  }
+}
+
+function desenharRecibo(doc, rc){
+  const sp = s => String(s).replace(/[\u00a0\u202f]/g, ' ');
+  const W = doc.internal.pageSize.getWidth(), M = 48;
+  const emissor = (cfg && cfg.titular) ? cfg.titular : 'Livro de Empréstimos';
+  const moeda = (cfg && cfg.moedaPlur) || 'escudos';
+  const quem = document.getElementById('user-email') ? document.getElementById('user-email').textContent : '';
+
+  doc.setFillColor(38, 91, 136); doc.rect(0, 0, W, 78, 'F');
+  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text('RECIBO DE PAGAMENTO', M, 40);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text(emissor, M, 60);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('Nº ' + rc.numero, W - M, 40, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text(rc.segundaVia ? '2.ª via' : 'Original', W - M, 60, { align: 'right' });
+
+  let y = 116;
+  const linha = (rot, val) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(110, 116, 128); doc.text(rot.toUpperCase(), M, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(28, 31, 38); doc.text(String(val), M + 170, y);
+    y += 22;
+  };
+  linha('Data do pagamento', rc.data);
+  linha('Recebido de', rc.nome || '—');
+  linha('NIF', rc.nif);
+  linha('Empréstimo', 'nº ' + rc.emprestimo);
+  linha('Prestação', 'nº ' + rc.prestacao + '   (vencimento ' + rc.vencimento + ')');
+  linha('Valor da prestação', sp(fmt(rc.valorPrestacao)) + ' ' + moeda);
+  y += 8;
+
+  doc.setDrawColor(38, 91, 136); doc.setLineWidth(1.2); doc.rect(M, y, W - 2 * M, 66);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(110, 116, 128); doc.text('VALOR RECEBIDO', M + 14, y + 20);
+  doc.setFontSize(21); doc.setTextColor(38, 91, 136); doc.text(sp(fmt(rc.valor)) + ' ' + moeda, M + 14, y + 49);
+  y += 66 + 20;
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.setTextColor(80, 86, 98);
+  doc.text('(' + numeroPorExtenso(rc.valor) + ')', M, y);
+  y += 26;
+
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(28, 31, 38);
+  doc.text(rc.completa ? 'Prestação totalmente paga.' : 'Pagamento parcial — falta pagar ' + sp(fmt(rc.falta)) + ' ' + moeda + ' desta prestação.', M, y);
+  y += 22;
+  doc.text('Saldo em dívida do empréstimo: ' + sp(fmt(rc.saldo)) + ' ' + moeda + (rc.segundaVia ? ' (à data de hoje)' : ''), M, y);
+
+  y += 78;
+  doc.setDrawColor(120, 126, 138); doc.setLineWidth(0.8); doc.line(W - M - 210, y, W - M, y);
+  doc.setFontSize(9); doc.setTextColor(110, 116, 128); doc.text('O responsável', W - M - 105, y + 14, { align: 'center' });
+  doc.text(((cfg && cfg.localEmissao) ? cfg.localEmissao + ', ' : '') + rc.data + (quem ? '  ·  Emitido por ' + quem : ''), M, y + 14);
+}
+function gerarRecibosPdf(recibos){
+  const jsPDF = window.jspdf && window.jspdf.jsPDF;
+  const doc = jsPDF ? new jsPDF({ unit: 'pt', format: 'a4' }) : null;
+  if (!doc){ imprimirRecibosHtml(recibos); return; }
+  recibos.forEach((rc, i) => { if (i > 0) doc.addPage(); desenharRecibo(doc, rc); });
+  doc.save(recibos.length === 1 ? 'recibo_' + String(recibos[0].numero).replace('/', '-') + '.pdf' : 'recibos_' + hoje() + '.pdf');
+  log(recibos.length === 1 ? 'Recibo ' + recibos[0].numero + ' gerado.' : recibos.length + ' recibos gerados.');
+}
+// alternativa se o gerador de PDF não carregar: abre a impressão (guardar como PDF)
+function imprimirRecibosHtml(recibos){
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const emissor = (cfg && cfg.titular) ? cfg.titular : 'Livro de Empréstimos';
+  const moeda = (cfg && cfg.moedaPlur) || 'escudos';
+  const pagina = rc => '<section><header><div><h1>RECIBO DE PAGAMENTO</h1><p>' + esc(emissor) + '</p></div><div class="r"><b>Nº ' + esc(rc.numero) + '</b><p>' + (rc.segundaVia ? '2.ª via' : 'Original') + '</p></div></header>' +
+    '<table>' + [['Data do pagamento', rc.data], ['Recebido de', rc.nome || '—'], ['NIF', rc.nif], ['Empréstimo', 'nº ' + rc.emprestimo],
+      ['Prestação', 'nº ' + rc.prestacao + ' (vencimento ' + rc.vencimento + ')'], ['Valor da prestação', fmt(rc.valorPrestacao) + ' ' + moeda]]
+      .map(x => '<tr><th>' + esc(x[0]) + '</th><td>' + esc(x[1]) + '</td></tr>').join('') + '</table>' +
+    '<div class="v"><small>VALOR RECEBIDO</small><strong>' + esc(fmt(rc.valor)) + ' ' + esc(moeda) + '</strong></div><p class="e">(' + esc(numeroPorExtenso(rc.valor)) + ')</p>' +
+    '<p>' + (rc.completa ? 'Prestação totalmente paga.' : 'Pagamento parcial — falta pagar ' + esc(fmt(rc.falta)) + ' ' + esc(moeda) + ' desta prestação.') + '</p>' +
+    '<p>Saldo em dívida do empréstimo: ' + esc(fmt(rc.saldo)) + ' ' + esc(moeda) + (rc.segundaVia ? ' (à data de hoje)' : '') + '</p>' +
+    '<div class="a"><span>' + esc(((cfg && cfg.localEmissao) ? cfg.localEmissao + ', ' : '') + rc.data) + '</span><span class="s">O responsável</span></div></section>';
+  const html = '<!doctype html><html><head><meta charset="utf-8"><title>Recibos</title><style>' +
+    '@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif;color:#1c1f26}section{height:297mm;box-sizing:border-box;page-break-after:always}' +
+    'header{background:#265b88;color:#fff;padding:22px 48px;display:flex;justify-content:space-between}h1{margin:0;font-size:22px}header p{margin:6px 0 0;font-size:12px}.r{text-align:right}' +
+    'table{margin:28px 48px 0;border-collapse:collapse}th{text-align:left;font-size:10px;color:#6e7480;text-transform:uppercase;padding:7px 40px 7px 0}td{font-size:14px}' +
+    '.v{margin:24px 48px 0;border:1.5px solid #265b88;padding:14px}.v small{display:block;font-size:10px;color:#6e7480}.v strong{font-size:26px;color:#265b88}' +
+    'p{margin:12px 48px;font-size:14px}.e{font-style:italic;font-size:12px;color:#505662}.a{margin:70px 48px 0;display:flex;justify-content:space-between;font-size:12px;color:#6e7480}' +
+    '.s{border-top:1px solid #787e8a;padding-top:6px;width:210px;text-align:center}</style></head><body>' + recibos.map(pagina).join('') + '</body></html>';
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+  setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300);
+  log('Não foi possível gerar o PDF diretamente (sem ligação ao gerador). Escolhe "Guardar como PDF" na janela de impressão.');
+}
+
+/* ---------- pagar uma prestação (menu flutuante do mapa) ---------- */
+let pagarRow = null;
+async function abrirPagar(idPrestacao){
+  if (!requireGestao()) return;
+  const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrestacao).single();
+  if (error){ log('Erro: ' + error.message, true); return; }
+  pagarRow = row;
+  const falta = faltaPrestacao(row), pago = valorPagoPrestacao(row);
+  document.getElementById('pagar-info').textContent = 'Prestação nº ' + row.numero_prestacao + ' · vencimento ' + row.data_vencimento +
+    ' · valor ' + fmt(row.valor_prestacao) + (pago > 0.004 ? ' · já pago ' + fmt(pago) : '') + ' · em falta ' + fmt(falta);
+  document.getElementById('pagar-valor').value = falta;
+  document.getElementById('pagar-data').value = hoje();
+  atualizarPagarHint();
+  fmCloseAll();
+  document.getElementById('pagar-wrap').classList.add('open');
+  const campo = document.getElementById('pagar-valor');
+  setTimeout(() => { campo.focus(); campo.select(); }, 40);
+}
+function atualizarPagarHint(){
+  const el = document.getElementById('pagar-hint');
+  if (!pagarRow){ el.textContent = ''; return; }
+  const falta = faltaPrestacao(pagarRow);
+  const v = Math.round(parseFloat(document.getElementById('pagar-valor').value));
+  if (isNaN(v) || v <= 0) el.textContent = 'Indica um valor maior que 0.';
+  else if (v + 0.5 < falta) el.textContent = 'Pagamento parcial — ficam a faltar ' + fmt(falta - v) + ' desta prestação.';
+  else if (v > falta + 0.5) el.textContent = 'O excedente de ' + fmt(v - falta) + ' passa para as prestações seguintes.';
+  else el.textContent = 'Paga a prestação por inteiro.';
+}
+async function confirmarPagar(){
+  if (!requireGestao() || !pagarRow) return;
+  const valor = Math.round(parseFloat(document.getElementById('pagar-valor').value));
+  const dataPag = document.getElementById('pagar-data').value;
+  if (isNaN(valor) || valor <= 0){ log('Indica um valor válido.', true); return; }
+  if (!dataPag){ log('Indica a data do pagamento.', true); return; }
+  const btn = document.getElementById('pagar-confirmar');
+  btn.disabled = true;
+  try {
+    const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', pagarRow.id).single();
+    if (error){ log('Erro: ' + error.message, true); return; }
+    const res = await aplicarPagamento(row, valor, dataPag, '');
+    if (res.erro){ log(res.erro, true); return; }
+    fmCloseAll();
+    pagarRow = null;
+    log('Pagamento registado: ' + descreverPagamento(res) + '.');
+    verMapa(emprestimoAtual);
+    await emitirRecibos([{ aplicados: res.aplicados, dataPag }]);
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 /* ---------- pagamentos por NIF ---------- */
@@ -2587,6 +2784,7 @@ async function registarPagamentoManual(){
   document.getElementById('pm-info').textContent = '';
   sel.innerHTML = ''; sel.style.display = 'none';
   if (emprestimoAtual && res.aplicados.some(a => a.row.emprestimo_id === emprestimoAtual.id)) verMapa(emprestimoAtual);
+  await emitirRecibos([{ aplicados: res.aplicados, dataPag }]);
 }
 
 async function exportarPendentes(){
@@ -2669,7 +2867,7 @@ async function importarPagamentosExcel(){
   if (col.data < 0){ logEl.textContent = 'Não encontrei a coluna "Data Pagamento" no ficheiro.'; return; }
 
   let processadas = 0, ignoradas = 0;
-  const erros = [], avisos = [];
+  const erros = [], avisos = [], pagamentosFeitos = [];
 
   for (let i = hRow + 1; i < m.length; i++){
     const r = m[i];
@@ -2709,6 +2907,7 @@ async function importarPagamentosExcel(){
       if (resp.erro){ erros.push('Linha ' + lin + ': ' + resp.erro); continue; }
       if (resp.sobra > 0.01) avisos.push('Linha ' + lin + ': sobraram ' + fmt(resp.sobra) + ' sem prestação onde aplicar');
       processadas++;
+      pagamentosFeitos.push({ aplicados: resp.aplicados, dataPag });
     } catch (e){
       erros.push('Linha ' + lin + ': ' + (e && e.message ? e.message : e));
     }
@@ -2721,6 +2920,9 @@ async function importarPagamentosExcel(){
   toast(processadas + ' processado(s), ' + erros.length + ' com erro', erros.length ? 'err' : 'ok');
   fileInput.value = '';
   if (emprestimoAtual) verMapa(emprestimoAtual);
+  if (pagamentosFeitos.length && await confirmar('Gerar recibos?', 'Foram registados ' + pagamentosFeitos.length + ' pagamento(s). Queres gerar um PDF com os recibos (um por prestação paga)?', 'Gerar recibos')){
+    await emitirRecibos(pagamentosFeitos);
+  }
 }
 
 /* ---------- BANCO ---------- */
