@@ -536,7 +536,7 @@
           <input id="valor" type="number" step="1" placeholder="10000">
           <div class="row2">
             <div>
-              <label for="taxa">Taxa de juro anual (%)</label>
+              <label for="taxa">Taxa de juro (%)</label>
               <input id="taxa" type="number" step="0.01" placeholder="12.5">
             </div>
             <div>
@@ -582,7 +582,7 @@
           <div class="kpis">
             <div class="kpi"><div class="k-label">Empréstimos</div><div class="k-value" id="kpi-emp-n">0</div></div>
             <div class="kpi"><div class="k-label">Total emprestado</div><div class="k-value" id="kpi-emp-total">0</div></div>
-            <div class="kpi"><div class="k-label">Taxa média anual</div><div class="k-value" id="kpi-emp-taxa">0,00%</div></div>
+            <div class="kpi"><div class="k-label">Taxa média</div><div class="k-value" id="kpi-emp-taxa">0,00%</div></div>
           </div>
           <table id="tabela-emprestimos">
             <thead><tr><th>Data início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th>Estado</th></tr></thead>
@@ -609,7 +609,7 @@
             <label for="edit-emp-valor">Valor</label>
             <input id="edit-emp-valor" type="number" step="1">
             <div class="row2">
-              <div><label for="edit-emp-taxa">Taxa de juro anual (%)</label><input id="edit-emp-taxa" type="number" step="0.01"></div>
+              <div><label for="edit-emp-taxa">Taxa de juro (%)</label><input id="edit-emp-taxa" type="number" step="0.01"></div>
               <div><label for="edit-emp-prestacoes">Nº de prestações</label><input id="edit-emp-prestacoes" type="number"></div>
             </div>
             <div class="row2">
@@ -909,7 +909,7 @@
         <label for="sim-valor">Valor</label>
         <input id="sim-valor" type="number" step="1" placeholder="10000">
         <div class="row2">
-          <div><label for="sim-taxa">Taxa de juro anual (%)</label><input id="sim-taxa" type="number" step="0.01" placeholder="12.5"></div>
+          <div><label for="sim-taxa">Taxa de juro (%)</label><input id="sim-taxa" type="number" step="0.01" placeholder="12.5"></div>
           <div><label for="sim-prestacoes">Nº de prestações</label><input id="sim-prestacoes" type="number" placeholder="24"></div>
         </div>
         <div class="row2">
@@ -1836,19 +1836,25 @@ async function carregarEmprestimos(nif){
   });
 }
 
-function gerarLinhasMapa(valor, taxaAnual, nPrestacoes, dataInicioStr, periodicidade){
-  const divisor = periodicidade === 'TRIMESTRAL' ? 4 : (periodicidade === 'ANUAL' ? 1 : 12);
-  const taxaPeriodica = (taxaAnual / 100) / divisor;
+function gerarLinhasMapa(valor, taxa, nPrestacoes, dataInicioStr, periodicidade){
+  // juro simples sobre o capital: juro total = valor * taxa% (ex.: 60.000 a 7% => 4.200)
+  // valores inteiros: as prestações (e o juro) são todos iguais, exceto a PRIMEIRA, que fica com
+  // a diferença do arredondamento (por isso é a maior); a soma dá sempre exatamente valor + juro
   valor = Math.round(valor);
-  const prestacaoFixa = Math.round(taxaPeriodica === 0 ? valor / nPrestacoes : valor * taxaPeriodica / (1 - Math.pow(1 + taxaPeriodica, -nPrestacoes)));
+  const totalJuro = Math.round(valor * (taxa / 100));
+  const totalPagar = valor + totalJuro;
+  const n = nPrestacoes;
+  const prestacaoBase = Math.floor(totalPagar / n);
+  const juroBase = Math.floor(totalJuro / n);
+  const prestacaoPrimeira = totalPagar - prestacaoBase * (n - 1);
+  const juroPrimeiro = totalJuro - juroBase * (n - 1);
   const linhas = [];
   let saldo = valor;
   const dataInicio = new Date(dataInicioStr + 'T00:00:00');
-  for (let i = 1; i <= nPrestacoes; i++){
-    const juro = Math.round(saldo * taxaPeriodica);
-    let capital = Math.min(prestacaoFixa - juro, saldo);
-    let prestacao = prestacaoFixa;
-    if (i === nPrestacoes){ capital = saldo; prestacao = capital + juro; }   // a última acerta as diferenças de arredondamento
+  for (let i = 1; i <= n; i++){
+    const prestacao = i === 1 ? prestacaoPrimeira : prestacaoBase;
+    const juro = i === 1 ? juroPrimeiro : juroBase;
+    const capital = prestacao - juro;
     saldo = saldo - capital;
     const venc = new Date(dataInicio);
     if (periodicidade === 'TRIMESTRAL') venc.setMonth(venc.getMonth() + i*3);
@@ -1995,14 +2001,14 @@ async function criarEmprestimo(){
 
 /* ---------- IMPORTAR EMPRÉSTIMOS EXISTENTES (uma linha por empréstimo) ---------- */
 const COLS_MODELO_EMPRESTIMOS = [
-  'NIF', 'Nome', 'Data Início', 'Valor Empréstimo', 'Taxa Juro Anual (%)',
+  'NIF', 'Nome', 'Data Início', 'Valor Empréstimo', 'Taxa Juro (%)',
   'Nº Prestações', 'Periodicidade', 'Valor Pago'
 ];
 
 function exportarModeloEmprestimos(){
   const exemplo = {
     'NIF': '123456789', 'Nome': 'João Silva', 'Data Início': '2025-01-10',
-    'Valor Empréstimo': 10000, 'Taxa Juro Anual (%)': 12.5, 'Nº Prestações': 24,
+    'Valor Empréstimo': 10000, 'Taxa Juro (%)': 12.5, 'Nº Prestações': 24,
     'Periodicidade': 'MENSAL', 'Valor Pago': 2500
   };
   const ws = XLSX.utils.json_to_sheet([exemplo], { header: COLS_MODELO_EMPRESTIMOS });
@@ -2087,7 +2093,7 @@ async function importarEmprestimosExistentes(){
     per: achar(/period/),
     pago: achar(/valor.*pago/, /total.*pago/, /^pago$/, /pago/)
   };
-  const emFalta = [['nif','NIF'],['data','Data Início'],['valor','Valor Empréstimo'],['taxa','Taxa Juro Anual (%)'],['n','Nº Prestações']]
+  const emFalta = [['nif','NIF'],['data','Data Início'],['valor','Valor Empréstimo'],['taxa','Taxa Juro (%)'],['n','Nº Prestações']]
     .filter(([k]) => col[k] < 0).map(([, nome]) => nome);
   if (emFalta.length){ logEl.textContent = 'Faltam colunas no ficheiro: ' + emFalta.join(', ') + '. Usa o modelo Excel.'; return; }
 
