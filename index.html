@@ -238,7 +238,8 @@
   .pessoa-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end;}
   .pessoa-form .full{grid-column:1/-1;}
   .pessoa-form .btn-row button{margin-top:0;}
-  .pessoa-panel .empty{margin-bottom:10px;}
+  #procurar-pessoa-wrap .empty{margin-bottom:10px;}
+  .pessoa-left{margin:0 0 14px 0;width:fit-content;min-width:min(280px,100%);max-width:100%;text-align:left;}
   #pesq-nome-resultados .side-link{color:var(--ink);}
   #pesq-nome-resultados .side-link:hover{background:var(--card-2);}
   @media (max-width:900px){ .pessoa-row{grid-template-columns:1fr;} }
@@ -368,34 +369,29 @@
     *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;}
   }
 
-  /* ---------- IMPRESSÃO DE CHEQUE ---------- */
+  /* ---------- IMPRESSÃO DE CHEQUE ----------
+     Réplica do modelo Cheque.xlsx (A4 vertical, margens 18 mm esq. / 19 mm topo, 100 %, Arial Narrow 14).
+     O banco já traz o cheque impresso: só saem os campos vazios (valor, local, data, beneficiário, extenso).
+     Colunas A-E = 64+64+64+61+208 px; linhas 1-6 = 21 / 12,75 / 18 / 24,75 / 18,75 / 40,5 pt. */
   #print-cheque{display:none;}
-  @media print{
-    body *{visibility:hidden;}
-    #print-cheque, #print-cheque *{visibility:visible;}
-    #print-cheque{display:block;position:fixed;top:0;left:0;width:100%;padding:24px;background:#fff;color:#111;}
+  .chq{position:relative;width:461px;height:135.75pt;color:#000;background:#fff;}
+  .chq > div{
+    position:absolute;box-sizing:border-box;padding:0 1px;
+    font-family:'Arial Narrow',ArialNarrow,'Liberation Sans Narrow','Nimbus Sans Narrow',Arial,sans-serif;
+    font-size:14pt;line-height:18pt;white-space:pre;
+    display:flex;align-items:flex-end;
   }
-  .cheque-layout{position:relative;border:1.5px solid #222;padding:0 0 20px;font-family:'IBM Plex Mono',ui-monospace,monospace;color:#111;background:#fff;max-width:620px;margin:0 auto;}
-  .cheque-layout .pc-topo{display:flex;justify-content:space-between;align-items:center;background:#15417e;color:#fff;padding:10px 16px;}
-  .cheque-layout .pc-banco{font-family:'IBM Plex Sans',sans-serif;font-size:19px;font-weight:800;}
-  .cheque-layout .pc-pais{font-size:11px;font-weight:700;line-height:1.1;text-align:right;}
-  .cheque-layout .pc-sede{font-size:11px;font-weight:700;padding:4px 16px 0;color:#444;}
-  .cheque-layout .pc-titular{font-size:14px;font-weight:700;padding:10px 16px 4px;border-bottom:1.5px solid #15417e;margin:0 16px;}
-  .cheque-layout .pc-linha-pague{display:flex;align-items:center;gap:10px;padding:12px 16px 4px;font-size:13px;flex-wrap:wrap;}
-  .cheque-layout .pc-moeda{font-weight:700;}
-  .cheque-layout .pc-caixa-valor{margin-left:auto;border:1.5px solid #222;padding:5px 10px;font-size:17px;font-weight:700;letter-spacing:.05em;}
-  .cheque-layout .pc-linha-local{display:flex;justify-content:space-between;align-items:flex-end;padding:10px 16px;font-size:12px;color:#333;}
-  .cheque-layout .pc-linha-local strong{font-size:14px;color:#111;}
-  .cheque-layout .pc-data-caixas{display:flex;gap:8px;}
-  .cheque-layout .pc-data-caixas div{border:1.5px solid #222;padding:4px 10px;text-align:center;}
-  .cheque-layout .pc-data-caixas span{display:block;font-size:15px;font-weight:700;}
-  .cheque-layout .pc-data-caixas small{font-size:9px;color:#555;}
-  .cheque-layout .pc-campo{margin:14px 16px 0;font-size:14px;padding-bottom:6px;border-bottom:1px dashed #999;}
-  .cheque-layout .pc-extenso{font-size:13.5px;}
-  .cheque-layout .pc-rodape{display:flex;gap:28px;margin:18px 16px 0;padding-top:10px;border-top:1px solid #ccc;font-size:11px;color:#444;}
-  .cheque-layout .pc-rodape strong{font-size:14px;color:#111;}
-  .cheque-layout .assinatura{margin:30px 16px 0;display:flex;justify-content:flex-end;}
-  .cheque-layout .assinatura div{border-top:1px solid #444;width:220px;text-align:center;font-size:11.5px;padding-top:4px;color:#555;}
+  #chq-valor  {left:192px;top:0;       width:269px;height:21pt;    justify-content:flex-end;}   /* D1:E1 */
+  #chq-local  {left:253px;top:33.75pt; width:208px;height:18pt;    justify-content:center;align-items:flex-start;} /* E3 */
+  #chq-data   {left:253px;top:51.75pt; width:208px;height:24.75pt; justify-content:flex-end;}   /* E4 */
+  #chq-benef  {left:0;    top:76.5pt;  width:461px;height:18.75pt; justify-content:flex-start;} /* A5:E5 */
+  #chq-extenso{left:0;    top:95.25pt; width:461px;height:40.5pt;  display:block;white-space:normal;text-align:justify;} /* A6:E6 */
+  @media print{
+    @page{size:A4 portrait;margin:0;}
+    html,body{margin:0 !important;padding:0 !important;background:#fff !important;}
+    body.imprimir-cheque > *:not(#print-cheque){display:none !important;}
+    body.imprimir-cheque #print-cheque{display:block;position:absolute;left:18mm;top:19mm;}
+  }
 </style>
 
 </head>
@@ -473,61 +469,46 @@
 <main>
   <!-- ==================== VISTA: EMPRÉSTIMOS ==================== -->
   <div class="view" id="view-emprestimos">
-    <section class="panel pessoa-panel">
-      <h2>Pessoa</h2>
-      <div class="pessoa-row">
-        <div class="pf">
+    <div class="toolbar">
+      <div class="fm-wrap" id="procurar-pessoa-wrap">
+        <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Procurar pessoa</button>
+        <div class="float-menu wide">
+          <h2>Procurar pessoa</h2>
           <label for="nif">NIF</label>
           <div class="inline-field">
-            <input id="nif" placeholder="123456789">
+            <input id="nif" placeholder="123456789" onkeydown="if(event.key==='Enter')procurarPessoa()">
             <button class="ghost" onclick="procurarPessoa()">Procurar</button>
           </div>
-        </div>
-        <div class="pf">
           <label for="pesq-nome">ou pesquisar por nome</label>
           <input id="pesq-nome" placeholder="Escreve parte do nome..." oninput="pesquisarPorNome()">
           <div id="pesq-nome-resultados"></div>
-        </div>
-        <div id="pessoa-card" style="display:none" class="pessoa-card">
-          <div class="pc-inner">
-            <div class="avatar" id="pessoa-avatar">?</div>
-            <div>
-              <div class="nome" id="pessoa-nome"></div>
-              <div id="pessoa-nif-txt" class="nif-txt"></div>
-              <div id="pessoa-limite-txt" class="nif-txt"></div>
+
+          <div id="editar-pessoa" class="gestao-only" style="display:none">
+            <hr class="divider">
+            <div class="empty">A editar pessoa existente.</div>
+            <div class="pessoa-form">
+              <div class="pf"><label for="edit-nome">Nome</label><input id="edit-nome" placeholder="Nome completo"></div>
+              <div class="pf"><label for="edit-contacto">Contacto</label><input id="edit-contacto" placeholder="Opcional"></div>
+              <div class="pf"><label for="edit-limite">Limite de crédito (opcional)</label><input id="edit-limite" type="number" step="1" placeholder="Deixa em branco para não haver limite"></div>
+              <div class="btn-row">
+                <button onclick="guardarEdicaoPessoa()">Guardar</button>
+                <button class="ghost" onclick="document.getElementById('editar-pessoa').style.display='none'">Cancelar</button>
+              </div>
             </div>
           </div>
-          <button class="small ghost gestao-only" style="margin-top:10px;" onclick="mostrarEditarPessoa()">Editar</button>
-        </div>
-      </div>
 
-      <div id="editar-pessoa" class="gestao-only" style="display:none">
-        <hr class="divider">
-        <div class="empty">A editar pessoa existente.</div>
-        <div class="pessoa-form">
-          <div class="pf"><label for="edit-nome">Nome</label><input id="edit-nome" placeholder="Nome completo"></div>
-          <div class="pf"><label for="edit-contacto">Contacto</label><input id="edit-contacto" placeholder="Opcional"></div>
-          <div class="pf"><label for="edit-limite">Limite de crédito (opcional)</label><input id="edit-limite" type="number" step="1" placeholder="Deixa em branco para não haver limite"></div>
-          <div class="btn-row">
-            <button onclick="guardarEdicaoPessoa()">Guardar</button>
-            <button class="ghost" onclick="document.getElementById('editar-pessoa').style.display='none'">Cancelar</button>
+          <div id="criar-pessoa" class="gestao-only" style="display:none">
+            <hr class="divider">
+            <div class="empty">Este NIF ainda não está registado.</div>
+            <div class="pessoa-form">
+              <div class="pf"><label for="novo-nome">Nome</label><input id="novo-nome" placeholder="Nome completo"></div>
+              <div class="pf"><label for="novo-contacto">Contacto</label><input id="novo-contacto" placeholder="Opcional"></div>
+              <div class="pf"><label for="novo-limite">Limite de crédito (opcional)</label><input id="novo-limite" type="number" step="1" placeholder="Deixa em branco para não haver limite"></div>
+              <div class="btn-row"><button onclick="criarPessoa()">Registar pessoa</button></div>
+            </div>
           </div>
         </div>
       </div>
-
-      <div id="criar-pessoa" class="gestao-only" style="display:none">
-        <hr class="divider">
-        <div class="empty">Este NIF ainda não está registado.</div>
-        <div class="pessoa-form">
-          <div class="pf"><label for="novo-nome">Nome</label><input id="novo-nome" placeholder="Nome completo"></div>
-          <div class="pf"><label for="novo-contacto">Contacto</label><input id="novo-contacto" placeholder="Opcional"></div>
-          <div class="pf"><label for="novo-limite">Limite de crédito (opcional)</label><input id="novo-limite" type="number" step="1" placeholder="Deixa em branco para não haver limite"></div>
-          <div class="btn-row"><button onclick="criarPessoa()">Registar pessoa</button></div>
-        </div>
-      </div>
-    </section>
-
-    <div class="toolbar">
       <div class="fm-wrap gestao-only" id="novo-emp-panel" style="display:none">
         <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Novo empréstimo</button>
         <div class="float-menu">
@@ -575,6 +556,18 @@
           <div id="import-emp-log" class="empty" style="margin-top:12px;"></div>
         </div>
       </div>
+    </div>
+
+    <div id="pessoa-card" style="display:none" class="pessoa-card pessoa-left">
+      <div class="pc-inner">
+        <div class="avatar" id="pessoa-avatar">?</div>
+        <div>
+          <div class="nome" id="pessoa-nome"></div>
+          <div id="pessoa-nif-txt" class="nif-txt"></div>
+          <div id="pessoa-limite-txt" class="nif-txt"></div>
+        </div>
+      </div>
+      <button class="small ghost gestao-only" style="margin-top:10px;" onclick="mostrarEditarPessoa()">Editar</button>
     </div>
 
         <section class="panel" id="lista-panel" style="display:none">
@@ -940,7 +933,7 @@
           <thead><tr><th>#</th><th>Vencimento</th><th class="num">Prestação</th><th class="num">Juro</th><th class="num">Capital</th><th class="num">Em dívida</th></tr></thead>
           <tbody id="sim-body"></tbody>
         </table>
-        <div class="empty">Esta simulação não fica gravada. Para criar o empréstimo a sério, pesquisa/regista a pessoa na aba Empréstimos — os valores já ficam prontos no formulário.</div>
+        <div class="empty">Esta simulação não fica gravada. Para criar o empréstimo a sério, usa o botão Procurar pessoa na aba Empréstimos — os valores já ficam prontos no formulário.</div>
       </section>
   </div>
 
@@ -961,33 +954,12 @@
 </div>
 <!-- fim #app-content -->
 <div id="print-cheque">
-  <div class="cheque-layout">
-    <div class="pc-topo">
-      <div class="pc-banco">Banco Interatlântico</div>
-      <div class="pc-pais">CABO<br>VERDE</div>
-    </div>
-    <div class="pc-sede">SEDE</div>
-    <div class="pc-titular" id="pc-titular"></div>
-    <div class="pc-linha-pague">
-      <span>Pague por este cheque</span>
-      <span class="pc-moeda" id="pc-moeda"></span>
-      <span class="pc-caixa-valor" id="pc-valor"></span>
-    </div>
-    <div class="pc-linha-local">
-      <div>Local de Emissão<br><strong id="pc-local"></strong></div>
-      <div class="pc-data-caixas">
-        <div><span id="pc-ano"></span><small>Ano</small></div>
-        <div><span id="pc-mes"></span><small>Mês</small></div>
-        <div><span id="pc-dia"></span><small>Dia</small></div>
-      </div>
-    </div>
-    <div class="pc-campo">à ordem de <strong id="pc-beneficiario"></strong></div>
-    <div class="pc-campo pc-extenso" id="pc-extenso"></div>
-    <div class="pc-rodape">
-      <div>Número de Conta<br><strong id="pc-conta"></strong></div>
-      <div>Número de Cheque<br><strong id="pc-numero"></strong></div>
-    </div>
-    <div class="assinatura"><div>Assinatura</div></div>
+  <div class="chq">
+    <div id="chq-valor"></div>
+    <div id="chq-local"></div>
+    <div id="chq-data"></div>
+    <div id="chq-benef"></div>
+    <div id="chq-extenso"></div>
   </div>
 </div>
 
@@ -1254,7 +1226,11 @@ function numeroPorExtenso(valor){
 
   let textoInteiro;
   if (grupos.length === 1) textoInteiro = grupos[0];
-  else textoInteiro = grupos.slice(0,-1).join(', ') + ' e ' + grupos[grupos.length-1];
+  else {
+    const ultimo = cent > 0 ? cent : milhares;   // valor do último grupo escrito
+    const ligacao = (ultimo < 100 || ultimo % 100 === 0) ? ' e ' : ', ';
+    textoInteiro = grupos.slice(0,-1).join(', ') + ligacao + grupos[grupos.length-1];
+  }
 
   const moedaSing = cfg.moedaSing || 'unidade';
   const moedaPlur = cfg.moedaPlur || 'unidades';
@@ -1519,6 +1495,7 @@ async function procurarPessoa(){
   document.getElementById('editar-pessoa').style.display = 'none';
   document.getElementById('novo-emp-panel').style.display = 'block';
   document.getElementById('lista-panel').style.display = 'block';
+  fmCloseAll();
   log('Pessoa encontrada.');
   carregarEmprestimos(nif);
 }
@@ -1576,6 +1553,7 @@ async function criarPessoa(){
   mostrarPessoaCard(data);
   document.getElementById('novo-emp-panel').style.display = 'block';
   document.getElementById('lista-panel').style.display = 'block';
+  fmCloseAll();
   log('Pessoa registada.');
   carregarEmprestimos(nif);
   document.getElementById('novo-nome').value = '';
@@ -1588,7 +1566,10 @@ function mostrarEditarPessoa(){
   document.getElementById('edit-nome').value = pessoaAtual.nome || '';
   document.getElementById('edit-contacto').value = pessoaAtual.contacto || '';
   document.getElementById('edit-limite').value = pessoaAtual.limite_credito != null ? pessoaAtual.limite_credito : '';
+  document.getElementById('criar-pessoa').style.display = 'none';
   document.getElementById('editar-pessoa').style.display = 'block';
+  const w = document.getElementById('procurar-pessoa-wrap');
+  fmCloseAll(w); w.classList.add('open');
 }
 
 async function guardarEdicaoPessoa(){
@@ -1607,6 +1588,7 @@ async function guardarEdicaoPessoa(){
   pessoaAtual = data;
   mostrarPessoaCard(data);
   document.getElementById('editar-pessoa').style.display = 'none';
+  fmCloseAll();
   log('Pessoa atualizada.');
 }
 
@@ -3041,21 +3023,28 @@ async function emitirCheque(){
   carregarCheques();
 }
 
-function imprimirCheque(c){
-  const [ano, mes, dia] = (c.data_emissao || '').split('-');
-  document.getElementById('pc-titular').textContent = cfg.titular || '';
-  document.getElementById('pc-moeda').textContent = (cfg.moedaPlur || 'escudos').toUpperCase() + ' CV';
-  document.getElementById('pc-valor').textContent = fmt(c.valor) + '$';
-  document.getElementById('pc-local').textContent = cfg.localEmissao || 'Praia';
-  document.getElementById('pc-ano').textContent = ano || '';
-  document.getElementById('pc-mes').textContent = mes || '';
-  document.getElementById('pc-dia').textContent = dia || '';
-  document.getElementById('pc-beneficiario').textContent = c.beneficiario;
-  document.getElementById('pc-extenso').textContent = numeroPorExtenso(c.valor) + ' -------------------------------';
-  document.getElementById('pc-numero').textContent = c.numero_cheque;
-  document.getElementById('pc-conta').textContent = cfg.conta || '—';
-  window.print();
+// Mesmo formato de número do Excel: cada dígito num "quadrado" do cheque, com 2 ou 3 espaços a seguir
+// (valor: 10 casas; data AAAAMMDD: 10 casas com 1 espaço à frente). Os dígitos entram da direita para a esquerda.
+function chequeDigitos(txt, espacos, frente){
+  const d = String(txt).replace(/\D/g, '');
+  const n = espacos.length;
+  const casas = new Array(n).fill('');
+  for (let i = 0; i < Math.min(d.length, n); i++) casas[n - 1 - i] = d[d.length - 1 - i];
+  if (d.length > n) casas[0] = d.slice(0, d.length - n + 1);
+  return ' '.repeat(frente) + casas.map((c, i) => c + ' '.repeat(espacos[i])).join('');
 }
+function imprimirCheque(c){
+  document.getElementById('chq-valor').textContent  = chequeDigitos(Math.round(c.valor), [2,2,2,3,3,3,3,3,3,2], 0);
+  document.getElementById('chq-local').textContent  = ' '.repeat(13) + (cfg.localEmissao || 'Praia');
+  document.getElementById('chq-data').textContent   = chequeDigitos(c.data_emissao || '', [2,2,2,3,3,3,3,3,3,1], 1);
+  document.getElementById('chq-benef').textContent  = c.beneficiario || '';
+  const ext = numeroPorExtenso(c.valor);
+  document.getElementById('chq-extenso').textContent = ext.charAt(0).toLowerCase() + ext.slice(1);   // como no modelo: começa em minúscula
+  document.body.classList.add('imprimir-cheque');
+  window.print();
+  document.body.classList.remove('imprimir-cheque');
+}
+window.addEventListener('afterprint', () => document.body.classList.remove('imprimir-cheque'));
 </script>
 </body>
 </html>
