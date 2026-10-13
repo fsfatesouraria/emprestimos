@@ -290,6 +290,14 @@
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px;}
   .kpi{background:var(--card-2);border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;transition:transform .2s,border-color .2s;}
   .kpi:hover{transform:translateY(-2px);border-color:var(--accent);}
+  .kpi{text-align:center;}
+  .kpis-linha{grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;}
+  .kpis-linha .kpi{padding:9px 8px;}
+  .kpis-linha .k-label{font-size:10px;white-space:nowrap;}
+  .kpis-linha .k-value{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .kpi .k-value.neg{color:var(--danger);}
+  @media (max-width:1320px){ .kpis-linha .k-label{white-space:normal;line-height:1.2;min-height:2.4em;} }   /* título pode ir para 2 linhas; os valores continuam alinhados */
+  @media (max-width:1100px){ .kpis-linha{grid-template-columns:repeat(4,minmax(0,1fr));} }
   .kpi .k-label{font-size:10.5px;font-weight:600;color:var(--muted);}
   .kpi .k-value{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:16px;font-weight:700;margin-top:2px;}
   .progress-wrap{margin:-2px 0 18px;}
@@ -581,10 +589,15 @@
 
         <section class="panel" id="lista-panel" style="display:none">
           <h2>Empréstimos deste NIF<button type="button" class="btn-icon btn-pdf" style="margin-left:auto;" onclick="resumoPessoaPdf()" title="Resumo de todos os empréstimos em PDF" aria-label="Resumo de todos os empréstimos em PDF"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2.5H6a1 1 0 0 0-1 1v17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5z"/><path d="M14 2.5v5h5"/><text x="12" y="17.2" text-anchor="middle" font-size="6.4" font-weight="800" fill="#fff" stroke="none" font-family="Arial,sans-serif">PDF</text></svg></button></h2>
-          <div class="kpis">
+          <div class="kpis kpis-linha">
             <div class="kpi"><div class="k-label">Empréstimos</div><div class="k-value" id="kpi-emp-n">0</div></div>
-            <div class="kpi"><div class="k-label">Total emprestado</div><div class="k-value" id="kpi-emp-total">0</div></div>
+            <div class="kpi"><div class="k-label">Total do empréstimo</div><div class="k-value" id="kpi-emp-total">0</div></div>
+            <div class="kpi"><div class="k-label">Total sem juros</div><div class="k-value" id="kpi-emp-capital">0</div></div>
             <div class="kpi"><div class="k-label">Taxa média</div><div class="k-value" id="kpi-emp-taxa">0,00%</div></div>
+            <div class="kpi"><div class="k-label">Valor de juros</div><div class="k-value" id="kpi-emp-juros">0</div></div>
+            <div class="kpi"><div class="k-label">Total pago</div><div class="k-value" id="kpi-emp-pago">0</div></div>
+            <div class="kpi"><div class="k-label">Em dívida</div><div class="k-value" id="kpi-emp-divida">0</div></div>
+            <div class="kpi"><div class="k-label">Prestações em atraso</div><div class="k-value" id="kpi-emp-atraso">0</div></div>
           </div>
           <table id="tabela-emprestimos">
             <thead><tr><th>Data início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th>Estado</th><th><span class="sr-only">Extrato</span></th></tr></thead>
@@ -1997,21 +2010,44 @@ function limparFiltrosLista(){
 async function carregarEmprestimos(nif){
   const { data, error } = await sb.from('emprestimos').select('*').eq('nif', nif).order('data_inicio', {ascending:false});
   if (error){ log('Erro: ' + error.message, true); return; }
-  const totalEmp = data.reduce((s, e) => s + Number(e.valor_emprestimo), 0);
-  const taxaMedia = data.length ? data.reduce((s, e) => s + Number(e.taxa_juro_anual), 0) / data.length : 0;
-  document.getElementById('kpi-emp-n').textContent = data.length;
-  document.getElementById('kpi-emp-total').textContent = fmt(totalEmp);
-  document.getElementById('kpi-emp-taxa').textContent = fmt(taxaMedia) + '%';
-
   const ids = data.map(e => e.id);
   const porEmprestimo = new Map();
   if (ids.length){
-    const { data: prest } = await sb.from('mapa_amortizacao').select('emprestimo_id, estado, data_vencimento').in('emprestimo_id', ids);
+    const { data: prest } = await sb.from('mapa_amortizacao').select('*').in('emprestimo_id', ids);
     (prest || []).forEach(p => {
       if (!porEmprestimo.has(p.emprestimo_id)) porEmprestimo.set(p.emprestimo_id, []);
       porEmprestimo.get(p.emprestimo_id).push(p);
     });
   }
+
+  // totais da pessoa (os empréstimos anulados aparecem na lista mas não entram nestes valores)
+  let totEmp = 0, totJuros = 0, totPago = 0, totDivida = 0, totAtraso = 0, somaTaxa = 0, nValidos = 0;
+  data.forEach(emp => {
+    const linhas = porEmprestimo.get(emp.id) || [];
+    const estadoEmp = estadoFinalEmprestimo(emp, linhas);
+    if (estadoEmp === 'ANULADO') return;
+    nValidos++;
+    somaTaxa += Number(emp.taxa_juro_anual);
+    totEmp += Number(emp.valor_emprestimo);
+    totJuros += linhas.reduce((s, l) => s + Number(l.valor_juro || 0), 0);
+    const pago = linhas.reduce((s, l) => s + valorPagoPrestacao(l), 0);
+    totPago += pago;
+    if (estadoEmp !== 'LIQUIDADO'){
+      const aPagar = linhas.reduce((s, l) => s + Number(l.valor_prestacao || 0), 0);
+      totDivida += Math.max(0, arred(aPagar - pago));
+      totAtraso += linhas.filter(l => estadoPrestacao(l) === 'ATRASADO').length;
+    }
+  });
+  document.getElementById('kpi-emp-n').textContent = data.length;
+  document.getElementById('kpi-emp-total').textContent = fmt(totEmp + totJuros);
+  document.getElementById('kpi-emp-capital').textContent = fmt(totEmp);
+  document.getElementById('kpi-emp-taxa').textContent = fmt(nValidos ? somaTaxa / nValidos : 0) + '%';
+  document.getElementById('kpi-emp-juros').textContent = fmt(totJuros);
+  document.getElementById('kpi-emp-pago').textContent = fmt(arred(totPago));
+  document.getElementById('kpi-emp-divida').textContent = fmt(totDivida);
+  const elAtraso = document.getElementById('kpi-emp-atraso');
+  elAtraso.textContent = totAtraso;
+  elAtraso.classList.toggle('neg', totAtraso > 0);
 
   const tbody = document.querySelector('#tabela-emprestimos tbody');
   tbody.innerHTML = '';
