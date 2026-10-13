@@ -308,6 +308,8 @@
   td.num,th.num{text-align:right;}
   td.num{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap;}
   tr.loan-row{cursor:pointer;}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+  td.acao-pdf{text-align:right;white-space:nowrap;}
   tr.loan-row:hover{background:var(--accent-soft);}
   tr.loan-row.selected{background:var(--accent-soft);}
   tr.loan-row.selected td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
@@ -372,27 +374,31 @@
   }
 
   /* ---------- IMPRESSÃO DE CHEQUE ----------
-     Réplica do modelo Cheque.xlsx (A4 vertical, margens 18 mm esq. / 19 mm topo, 100 %, Arial Narrow 14).
-     O banco já traz o cheque impresso: só saem os campos vazios (valor, local, data, beneficiário, extenso).
-     Colunas A-E = 64+64+64+61+208 px; linhas 1-6 = 21 / 12,75 / 18 / 24,75 / 18,75 / 40,5 pt. */
+     Papel do tamanho do cheque (15 cm x 8,4 cm, sem margens); as medidas contam do canto superior esquerdo. O banco já traz o cheque
+     impresso: só saem os campos vazios. Todas as medidas abaixo são em cm, a partir do canto superior esquerdo.
+       nome ...... 5 cm do topo, 1,7 cm da esquerda
+       quantia ... 0,7 cm abaixo do nome, mesma largura, 2 linhas com 0,5 cm entre linhas
+       valor ..... alinhado à direita, a 0,5 cm da borda direita      data ..... idem, a 0,3 cm
+     (topo do nome/quantia = distância até ao topo das letras; --ajuste-letra compensa o espaço acima da letra) */
   #print-cheque{display:none;}
-  .chq{position:relative;width:461px;height:135.75pt;color:#000;background:#fff;}
+  .chq{position:relative;width:15cm;height:8.4cm;color:#000;background:#fff;
+       --ajuste-letra:0.07cm; --largura-campo:12.2cm;}
   .chq > div{
-    position:absolute;box-sizing:border-box;padding:0 1px;
+    position:absolute;box-sizing:border-box;padding:0;
     font-family:'Arial Narrow',ArialNarrow,'Liberation Sans Narrow','Nimbus Sans Narrow',Arial,sans-serif;
-    font-size:14pt;line-height:18pt;white-space:pre;
-    display:flex;align-items:flex-end;
+    font-size:14pt;line-height:0.5cm;white-space:pre;
   }
-  #chq-valor  {left:192px;top:0;       width:269px;height:21pt;    justify-content:flex-end;}   /* D1:E1 */
-  #chq-local  {left:253px;top:33.75pt; width:208px;height:18pt;    justify-content:center;align-items:flex-start;} /* E3 */
-  #chq-data   {left:253px;top:51.75pt; width:208px;height:24.75pt; justify-content:flex-end;}   /* E4 */
-  #chq-benef  {left:0;    top:76.5pt;  width:461px;height:18.75pt; justify-content:flex-start;} /* A5:E5 */
-  #chq-extenso{left:0;    top:95.25pt; width:461px;height:40.5pt;  display:block;white-space:normal;text-align:justify;} /* A6:E6 */
+  #chq-benef  {left:1.7cm; top:calc(5cm - var(--ajuste-letra)); width:var(--largura-campo); height:0.5cm; text-align:left;}
+  #chq-extenso{left:1.7cm; top:calc(5.7cm - var(--ajuste-letra)); width:var(--largura-campo); height:1cm;
+               white-space:normal;text-align:justify;}
+  #chq-valor  {right:0.5cm; top:2.01cm; height:0.635cm; line-height:0.635cm; text-align:right;}
+  #chq-local  {left:8.49cm; top:3.09cm; width:5.5cm;    height:0.635cm; line-height:0.635cm; text-align:center;}
+  #chq-data   {right:0.3cm; top:3.96cm; height:0.635cm; line-height:0.635cm; text-align:right;}
   @media print{
-    @page{size:A4 portrait;margin:0;}
+    @page{size:150mm 84mm;margin:0;}   /* o papel é do tamanho do cheque: 15 cm x 8,4 cm */
     html,body{margin:0 !important;padding:0 !important;background:#fff !important;}
     body.imprimir-cheque > *:not(#print-cheque){display:none !important;}
-    body.imprimir-cheque #print-cheque{display:block;position:absolute;left:18mm;top:19mm;}
+    body.imprimir-cheque #print-cheque{display:block;position:absolute;left:0;top:0;}
   }
 </style>
 
@@ -574,14 +580,14 @@
     </div>
 
         <section class="panel" id="lista-panel" style="display:none">
-          <h2>Empréstimos deste NIF</h2>
+          <h2>Empréstimos deste NIF<button type="button" class="btn-icon btn-pdf" style="margin-left:auto;" onclick="resumoPessoaPdf()" title="Resumo de todos os empréstimos em PDF" aria-label="Resumo de todos os empréstimos em PDF"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2.5H6a1 1 0 0 0-1 1v17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5z"/><path d="M14 2.5v5h5"/><text x="12" y="17.2" text-anchor="middle" font-size="6.4" font-weight="800" fill="#fff" stroke="none" font-family="Arial,sans-serif">PDF</text></svg></button></h2>
           <div class="kpis">
             <div class="kpi"><div class="k-label">Empréstimos</div><div class="k-value" id="kpi-emp-n">0</div></div>
             <div class="kpi"><div class="k-label">Total emprestado</div><div class="k-value" id="kpi-emp-total">0</div></div>
             <div class="kpi"><div class="k-label">Taxa média</div><div class="k-value" id="kpi-emp-taxa">0,00%</div></div>
           </div>
           <table id="tabela-emprestimos">
-            <thead><tr><th>Data início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Data início</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prestações</th><th>Estado</th><th><span class="sr-only">Extrato</span></th></tr></thead>
             <tbody></tbody>
           </table>
           <div class="empty" id="lista-vazia" style="display:none">Ainda não há empréstimos registados para este NIF.</div>
@@ -1763,9 +1769,10 @@ function exportarListaPdf(){
   log('Exportados ' + d.length + ' empréstimo(s) para PDF.');
 }
 // alternativa se o gerador de PDF não carregar: abre a impressão (guardar como PDF)
-function imprimirListaHtml(titulo, sub, cab, corpo, rodape){
+function imprimirListaHtml(titulo, sub, cab, corpo, rodape, colsNum){
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const num = i => i >= 3 && i <= 7;
+  const numCols = colsNum || [3, 4, 5, 6, 7];
+  const num = i => numCols.indexOf(i) >= 0;
   const linha = (cels, tag) => '<tr>' + cels.map((c, i) => '<' + tag + (num(i) ? ' class="n"' : '') + '>' + esc(c) + '</' + tag + '>').join('') + '</tr>';
   const html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(titulo) + '</title><style>' +
     '@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#1c1f26}h1{font-size:18px;margin:0 0 4px;color:#265b88}' +
@@ -1781,6 +1788,203 @@ function imprimirListaHtml(titulo, sub, cab, corpo, rodape){
   f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
   setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300);
   log('Não foi possível gerar o PDF diretamente (sem ligação ao gerador). Escolhe "Guardar como PDF" na janela de impressão.');
+}
+
+/* ---------- extrato de um empréstimo (PDF) ---------- */
+async function extratoEmprestimo(emp){
+  if (!requireConn()) return;
+  const { data, error } = await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', emp.id).order('numero_prestacao');
+  if (error){ log('Erro: ' + error.message, true); return; }
+  gerarExtratoPdf(emp, data || []);
+}
+function gerarExtratoPdf(emp, linhas){
+  const sp = s => String(s).replace(/[\u00a0\u202f]/g, ' ');
+  const moeda = (cfg && cfg.moedaPlur) || 'escudos';
+  const pessoa = (pessoaAtual && String(pessoaAtual.nif) === String(emp.nif)) ? pessoaAtual : null;
+  const nome = pessoa ? pessoa.nome : '';
+  const estadoEmp = estadoFinalEmprestimo(emp, linhas);
+  const fechado = estadoEmp === 'ANULADO' || estadoEmp === 'LIQUIDADO';
+  const quem = document.getElementById('user-email') ? document.getElementById('user-email').textContent : '';
+
+  const det = linhas.map(r => {
+    const e = estadoPrestacao(r);
+    return { r, e, pago: valorPagoPrestacao(r), falta: e === 'PAGO' ? 0 : faltaPrestacao(r) };
+  });
+  const soma = f => det.reduce((s, d) => s + f(d), 0);
+  const totPrest = soma(d => Number(d.r.valor_prestacao));
+  const totJuro = soma(d => Number(d.r.valor_juro));
+  const totCap = soma(d => Number(d.r.valor_capital));
+  const totPago = arred(soma(d => d.pago));
+  const emDivida = fechado ? 0 : Math.max(0, arred(totPrest - totPago));
+  const nPagas = det.filter(d => d.e === 'PAGO').length;
+  const nAtras = det.filter(d => d.e === 'ATRASADO').length;
+
+  const cab = ['Nº', 'Vencimento', 'Prestação', 'Juro', 'Capital', 'Capital em dívida', 'Pago', 'Em falta', 'Estado'];
+  const corpo = det.map(d => [String(d.r.numero_prestacao), d.r.data_vencimento, sp(fmt(d.r.valor_prestacao)), sp(fmt(d.r.valor_juro)),
+    sp(fmt(d.r.valor_capital)), sp(fmt(d.r.capital_em_divida)), sp(fmt(d.pago)), sp(fmt(d.falta)), d.e]);
+  const rodape = ['', 'Total', sp(fmt(totPrest)), sp(fmt(totJuro)), sp(fmt(totCap)), '', sp(fmt(totPago)), sp(fmt(soma(d => d.falta))), ''];
+
+  const jsPDF = window.jspdf && window.jspdf.jsPDF;
+  const doc = jsPDF ? new jsPDF({ unit: 'pt', format: 'a4' }) : null;
+  if (!doc || typeof doc.autoTable !== 'function'){
+    const sub = (nome ? nome + '  ·  ' : '') + 'NIF ' + emp.nif + '  ·  Empréstimo de ' + sp(fmt(emp.valor_emprestimo)) + ' ' + moeda + ' em ' + emp.data_inicio +
+      '  ·  Taxa ' + emp.taxa_juro_anual + '%  ·  ' + emp.numero_prestacoes + ' prestações  ·  Pago ' + sp(fmt(totPago)) + '  ·  Em dívida ' + sp(fmt(emDivida)) + '  ·  ' + estadoEmp;
+    imprimirListaHtml('Extrato do empréstimo', sub, cab, corpo, rodape, [2, 3, 4, 5, 6, 7]);
+    return;
+  }
+
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 40;
+  const emissor = (cfg && cfg.titular) ? cfg.titular : 'Livro de Empréstimos';
+  cabecalhoPdf(doc, W, M, 'EXTRATO DE EMPRÉSTIMO', 18, emissor, 'Empréstimo nº ' + emp.id, 'Emitido em ' + hoje());
+
+  let y = 106;
+  const campo = (x, rot, val) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(110, 116, 128); doc.text(rot.toUpperCase(), x, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(28, 31, 38); doc.text(String(val), x + 108, y);
+  };
+  const X2 = M + 262;
+  campo(M, 'Nome', nome || '—');                                   campo(X2, 'Valor emprestado', sp(fmt(emp.valor_emprestimo)) + ' ' + moeda); y += 17;
+  campo(M, 'NIF', emp.nif);                                        campo(X2, 'Taxa de juro', emp.taxa_juro_anual + '%'); y += 17;
+  campo(M, 'Data de início', emp.data_inicio);                     campo(X2, 'Prestações', emp.numero_prestacoes + (emp.periodicidade ? ' (' + String(emp.periodicidade).toLowerCase() + ')' : '')); y += 17;
+  campo(M, 'Estado', estadoEmp);                                   campo(X2, 'Total a pagar', sp(fmt(totPrest)) + ' ' + moeda); y += 14;
+
+  y += 10;
+  const caixa = (x, rot, val) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(110, 116, 128); doc.text(rot.toUpperCase(), x, y + 17);
+    doc.setFontSize(13); doc.setTextColor(38, 91, 136); doc.text(val, x, y + 36);
+  };
+  const cw = (W - 2 * M) / 3;
+  caixa(M, 'Total pago', sp(fmt(totPago)) + ' ' + moeda);
+  caixa(M + cw, 'Em dívida', sp(fmt(emDivida)) + ' ' + moeda);
+  caixa(M + 2 * cw, 'Prestações pagas', nPagas + ' de ' + det.length + (nAtras ? '  ·  ' + nAtras + ' em atraso' : ''));
+
+  const cores = { PAGO: [5, 150, 105], PENDENTE: [180, 83, 9], PARCIAL: [180, 83, 9], ATRASADO: [225, 29, 72] };
+  const numeric = i => i >= 2 && i <= 7;
+  doc.autoTable({
+    head: [cab], body: corpo, foot: [rodape], startY: y + 48 + 16, theme: 'striped', margin: { left: M, right: M },
+    styles: { fontSize: 8, cellPadding: 3.2, textColor: 30 },
+    headStyles: { fillColor: [38, 91, 136], textColor: 255, fontStyle: 'bold' },
+    footStyles: { fillColor: [228, 237, 245], textColor: 30, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [247, 248, 250] },
+    didParseCell: h => {
+      if (numeric(h.column.index)) h.cell.styles.halign = 'right';
+      if (h.section === 'body' && h.column.index === 8 && cores[h.cell.raw]){ h.cell.styles.textColor = cores[h.cell.raw]; h.cell.styles.fontStyle = 'bold'; }
+    },
+    didDrawPage: () => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120);
+      doc.text('Página ' + doc.internal.getNumberOfPages(), W - M, H - 20, { align: 'right' });
+      doc.text('Extrato gerado em ' + hoje() + (quem ? '  ·  ' + quem : ''), M, H - 20);
+    }
+  });
+  doc.save('extrato_emprestimo_' + emp.id + '_' + hoje() + '.pdf');
+  log('Extrato do empréstimo gerado.');
+}
+
+/* ---------- resumo de todos os empréstimos de uma pessoa (PDF, uma folha) ---------- */
+async function resumoPessoaPdf(){
+  if (!requireConn()) return;
+  if (!pessoaAtual){ log('Procura primeiro uma pessoa.', true); return; }
+  const re = await sb.from('emprestimos').select('*').eq('nif', pessoaAtual.nif).order('data_inicio', { ascending: true });
+  if (re.error){ log('Erro: ' + re.error.message, true); return; }
+  const emps = re.data || [];
+  if (!emps.length){ log('Esta pessoa ainda não tem empréstimos.', true); return; }
+  let mapa;
+  try { mapa = await buscarPorLotes('mapa_amortizacao', 'emprestimo_id', emps.map(e => e.id), '*'); }
+  catch (e){ log('Erro: ' + e.message, true); return; }
+  gerarResumoPessoaPdf(pessoaAtual, emps, mapa);
+}
+function gerarResumoPessoaPdf(pessoa, emps, mapa){
+  const sp = s => String(s).replace(/[\u00a0\u202f]/g, ' ');
+  const moeda = (cfg && cfg.moedaPlur) || 'escudos';
+  const quem = document.getElementById('user-email') ? document.getElementById('user-email').textContent : '';
+
+  const det = emps.map(emp => {
+    const linhas = mapa.filter(l => l.emprestimo_id === emp.id).sort((a, b) => a.numero_prestacao - b.numero_prestacao);
+    const estadoEmp = estadoFinalEmprestimo(emp, linhas);
+    const anulado = estadoEmp === 'ANULADO';
+    const fechado = anulado || estadoEmp === 'LIQUIDADO';
+    const totPrest = linhas.reduce((s, l) => s + Number(l.valor_prestacao), 0);
+    const pago = arred(linhas.reduce((s, l) => s + valorPagoPrestacao(l), 0));
+    const emDivida = fechado ? 0 : Math.max(0, arred(totPrest - pago));
+    const prox = linhas.find(l => estadoPrestacao(l) !== 'PAGO');
+    return { emp, estadoEmp, anulado, fechado, totPrest, pago, emDivida, prox,
+      n: linhas.length, nPagas: linhas.filter(l => estadoPrestacao(l) === 'PAGO').length,
+      nAtras: linhas.filter(l => estadoPrestacao(l) === 'ATRASADO').length };
+  });
+  const validos = det.filter(d => !d.anulado);           // os anulados aparecem na tabela mas não entram nos totais
+  const soma = (arr, f) => arr.reduce((s, d) => s + f(d), 0);
+  const totEmp = soma(validos, d => Number(d.emp.valor_emprestimo));
+  const totPrest = soma(validos, d => d.totPrest);
+  const totPago = soma(validos, d => d.pago);
+  const totDivida = soma(validos, d => d.emDivida);
+  const totAtras = soma(validos, d => d.nAtras);
+  const nAnulados = det.length - validos.length;
+
+  const cab = ['Nº', 'Início', 'Valor', 'Taxa', 'Prest.', 'Total a pagar', 'Pago', 'Em dívida', 'Próx. venc.', 'Estado'];
+  const corpo = det.map(d => [String(d.emp.id), d.emp.data_inicio, sp(fmt(d.emp.valor_emprestimo)), d.emp.taxa_juro_anual + '%',
+    d.nPagas + '/' + d.n, sp(fmt(d.totPrest)), sp(fmt(d.pago)), sp(fmt(d.emDivida)), (d.prox && !d.fechado) ? d.prox.data_vencimento : '—', d.estadoEmp]);
+  const rodape = ['', 'Total', sp(fmt(totEmp)), '', '', sp(fmt(totPrest)), sp(fmt(totPago)), sp(fmt(totDivida)), '', ''];
+  const nota = nAnulados ? nAnulados + ' empréstimo(s) anulado(s) não entra(m) nos totais.' : '';
+
+  const jsPDF = window.jspdf && window.jspdf.jsPDF;
+  const doc = jsPDF ? new jsPDF({ unit: 'pt', format: 'a4' }) : null;
+  if (!doc || typeof doc.autoTable !== 'function'){
+    const sub = pessoa.nome + '  ·  NIF ' + pessoa.nif + '  ·  ' + det.length + ' empréstimo(s)  ·  Emprestado ' + sp(fmt(totEmp)) + '  ·  Pago ' + sp(fmt(totPago)) +
+      '  ·  Em dívida ' + sp(fmt(totDivida)) + (totAtras ? '  ·  ' + totAtras + ' prestação(ões) em atraso' : '') + (nota ? '  ·  ' + nota : '');
+    imprimirListaHtml('Resumo dos empréstimos', sub, cab, corpo, rodape, [2, 3, 4, 5, 6, 7]);
+    return;
+  }
+
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 40;
+  const emissor = (cfg && cfg.titular) ? cfg.titular : 'Livro de Empréstimos';
+  cabecalhoPdf(doc, W, M, 'RESUMO DE EMPRÉSTIMOS', 18, emissor, '', 'Emitido em ' + hoje());
+
+  let y = 106;
+  const campo = (x, rot, val) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(110, 116, 128); doc.text(rot.toUpperCase(), x, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(28, 31, 38); doc.text(String(val), x + 108, y);
+  };
+  const X2 = M + 262;
+  const limite = pessoa.limite_credito ? sp(fmt(pessoa.limite_credito)) + ' ' + moeda : 'Sem limite definido';
+  campo(M, 'Nome', pessoa.nome);   campo(X2, 'Empréstimos', det.length + (nAnulados ? ' (' + nAnulados + ' anulado' + (nAnulados > 1 ? 's' : '') + ')' : '')); y += 17;
+  campo(M, 'NIF', pessoa.nif);     campo(X2, 'Total a pagar', sp(fmt(totPrest)) + ' ' + moeda); y += 17;
+  campo(M, 'Limite de crédito', limite); y += 14;
+
+  y += 10;
+  const cw = (W - 2 * M) / 4;
+  const caixa = (i, rot, val) => {
+    const x = M + i * cw;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(110, 116, 128); doc.text(rot.toUpperCase(), x, y + 17);
+    doc.setFontSize(12); doc.setTextColor(i === 3 && totAtras ? 225 : 38, i === 3 && totAtras ? 29 : 91, i === 3 && totAtras ? 72 : 136); doc.text(val, x, y + 36);
+  };
+  caixa(0, 'Total emprestado', sp(fmt(totEmp)));
+  caixa(1, 'Total pago', sp(fmt(totPago)));
+  caixa(2, 'Em dívida', sp(fmt(totDivida)));
+  caixa(3, 'Prestações em atraso', String(totAtras));
+
+  const cores = { PAGO: [5, 150, 105], LIQUIDADO: [5, 150, 105], PENDENTE: [180, 83, 9], PARCIAL: [180, 83, 9], ATRASADO: [225, 29, 72], ANULADO: [120, 120, 120] };
+  doc.autoTable({
+    head: [cab], body: corpo, foot: [rodape], startY: y + 48 + 16, theme: 'striped', margin: { left: M, right: M },
+    styles: { fontSize: 8, cellPadding: 3.2, textColor: 30 },
+    headStyles: { fillColor: [38, 91, 136], textColor: 255, fontStyle: 'bold' },
+    footStyles: { fillColor: [228, 237, 245], textColor: 30, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [247, 248, 250] },
+    didParseCell: h => {
+      if (h.column.index >= 2 && h.column.index <= 7) h.cell.styles.halign = 'right';
+      if (h.section === 'body' && h.column.index === 9 && cores[h.cell.raw]){ h.cell.styles.textColor = cores[h.cell.raw]; h.cell.styles.fontStyle = 'bold'; }
+    },
+    didDrawPage: () => {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120);
+      doc.text('Página ' + doc.internal.getNumberOfPages(), W - M, H - 20, { align: 'right' });
+      doc.text('Resumo gerado em ' + hoje() + (quem ? '  ·  ' + quem : ''), M, H - 20);
+    }
+  });
+  if (nota){
+    const fy = (doc.lastAutoTable && doc.lastAutoTable.finalY ? doc.lastAutoTable.finalY : y + 120) + 14;
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(110, 116, 128); doc.text(nota, M, fy);
+  }
+  doc.save('resumo_emprestimos_' + pessoa.nif + '_' + hoje() + '.pdf');
+  log('Resumo dos empréstimos gerado.');
 }
 
 function limparFiltrosLista(){
@@ -1818,7 +2022,13 @@ async function carregarEmprestimos(nif){
     tr.dataset.id = emp.id;
     tr.onclick = () => verMapa(emp);
     const estadoReal = estadoFinalEmprestimo(emp, porEmprestimo.get(emp.id) || []);
-    tr.innerHTML = `<td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td><span class="badge ${badgeClasseEmprestimo(estadoReal)}">${estadoReal}</span></td>`;
+    tr.innerHTML = `<td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td><span class="badge ${badgeClasseEmprestimo(estadoReal)}">${estadoReal}</span></td><td class="acao-pdf"></td>`;
+    const btnPdf = document.createElement('button');
+    btnPdf.type = 'button'; btnPdf.className = 'small ghost';
+    btnPdf.title = 'Extrato do empréstimo em PDF'; btnPdf.setAttribute('aria-label', 'Extrato do empréstimo em PDF');
+    btnPdf.innerHTML = ICONE_PDF;
+    btnPdf.onclick = ev => { ev.stopPropagation(); extratoEmprestimo(emp); };   // não abre o mapa ao clicar
+    tr.querySelector('.acao-pdf').appendChild(btnPdf);
     tbody.appendChild(tr);
   });
 }
@@ -2570,6 +2780,15 @@ async function reimprimirRecibo(idPrestacao){
   }
 }
 
+// Cabeçalho dos PDF sem faixa de cor (poupa tinta): logótipo à esquerda, textos escuros e uma linha fina por baixo
+function cabecalhoPdf(doc, W, M, titulo, tamanho, sub, dirTopo, dirBaixo){
+  try { doc.addImage(logoUrl(), 'PNG', M, 12, 54, 54); } catch (e) {}
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(tamanho); doc.setTextColor(38, 91, 136); doc.text(titulo, M + 68, 40);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(80, 86, 98); doc.text(sub, M + 68, 60);
+  if (dirTopo){ doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(28, 31, 38); doc.text(dirTopo, W - M, 40, { align: 'right' }); }
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(80, 86, 98); doc.text(dirBaixo, W - M, 60, { align: 'right' });
+  doc.setDrawColor(200, 204, 212); doc.setLineWidth(0.8); doc.line(M, 78, W - M, 78);
+}
 function desenharRecibo(doc, rc){
   const sp = s => String(s).replace(/[\u00a0\u202f]/g, ' ');
   const W = doc.internal.pageSize.getWidth(), M = 48;
@@ -2577,13 +2796,7 @@ function desenharRecibo(doc, rc){
   const moeda = (cfg && cfg.moedaPlur) || 'escudos';
   const quem = document.getElementById('user-email') ? document.getElementById('user-email').textContent : '';
 
-  doc.setFillColor(38, 91, 136); doc.rect(0, 0, W, 78, 'F');
-  doc.setFillColor(255, 255, 255); doc.rect(M, 11, 56, 56, 'F');
-  try { doc.addImage(logoUrl(), 'PNG', M + 3, 14, 50, 50); } catch (e) {}
-  doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(20); doc.text('RECIBO DE PAGAMENTO', M + 70, 40);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text(emissor, M + 70, 60);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text('Nº ' + rc.numero, W - M, 40, { align: 'right' });
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text(rc.segundaVia ? '2.ª via' : 'Original', W - M, 60, { align: 'right' });
+  cabecalhoPdf(doc, W, M, 'RECIBO DE PAGAMENTO', 20, emissor, 'Nº ' + rc.numero, rc.segundaVia ? '2.ª via' : 'Original');
 
   let y = 116;
   const linha = (rot, val) => {
@@ -2599,9 +2812,8 @@ function desenharRecibo(doc, rc){
   linha('Valor da prestação', sp(fmt(rc.valorPrestacao)) + ' ' + moeda);
   y += 8;
 
-  doc.setDrawColor(38, 91, 136); doc.setLineWidth(1.2); doc.rect(M, y, W - 2 * M, 66);
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(110, 116, 128); doc.text('VALOR RECEBIDO', M + 14, y + 20);
-  doc.setFontSize(21); doc.setTextColor(38, 91, 136); doc.text(sp(fmt(rc.valor)) + ' ' + moeda, M + 14, y + 49);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(110, 116, 128); doc.text('VALOR RECEBIDO', M, y + 20);
+  doc.setFontSize(21); doc.setTextColor(38, 91, 136); doc.text(sp(fmt(rc.valor)) + ' ' + moeda, M, y + 49);
   y += 66 + 20;
   doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.setTextColor(80, 86, 98);
   doc.text('(' + numeroPorExtenso(rc.valor) + ')', M, y);
@@ -2640,9 +2852,9 @@ function imprimirRecibosHtml(recibos){
     '<div class="a"><span>' + esc(((cfg && cfg.localEmissao) ? cfg.localEmissao + ', ' : '') + rc.data) + '</span><span class="s">O responsável</span></div></section>';
   const html = '<!doctype html><html><head><meta charset="utf-8"><title>Recibos</title><style>' +
     '@page{size:A4;margin:0}body{margin:0;font-family:Arial,sans-serif;color:#1c1f26}section{height:297mm;box-sizing:border-box;page-break-after:always}' +
-    'header{background:#265b88;color:#fff;padding:22px 48px;display:flex;justify-content:space-between;align-items:center}.l{display:flex;align-items:center;gap:14px}.l img{width:58px;height:58px;background:#fff;padding:3px;box-sizing:border-box}h1{margin:0;font-size:22px}header p{margin:6px 0 0;font-size:12px}.r{text-align:right}' +
+    'header{color:#1c1f26;padding:22px 48px;border-bottom:1px solid #c8ccd4;display:flex;justify-content:space-between;align-items:center}.l{display:flex;align-items:center;gap:14px}.l img{width:58px;height:58px}h1{margin:0;font-size:22px;color:#265b88}header p{margin:6px 0 0;font-size:12px}.r{text-align:right}' +
     'table{margin:28px 48px 0;border-collapse:collapse}th{text-align:left;font-size:10px;color:#6e7480;text-transform:uppercase;padding:7px 40px 7px 0}td{font-size:14px}' +
-    '.v{margin:24px 48px 0;border:1.5px solid #265b88;padding:14px}.v small{display:block;font-size:10px;color:#6e7480}.v strong{font-size:26px;color:#265b88}' +
+    '.v{margin:24px 48px 0}.v small{display:block;font-size:10px;color:#6e7480}.v strong{font-size:26px;color:#265b88}' +
     'p{margin:12px 48px;font-size:14px}.e{font-style:italic;font-size:12px;color:#505662}.a{margin:70px 48px 0;display:flex;justify-content:space-between;font-size:12px;color:#6e7480}' +
     '.s{border-top:1px solid #787e8a;padding-top:6px;width:210px;text-align:center}</style></head><body>' + recibos.map(pagina).join('') + '</body></html>';
   const f = document.createElement('iframe');
