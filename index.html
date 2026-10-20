@@ -381,33 +381,31 @@
     *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important;}
   }
 
-  /* ---------- IMPRESSÃO DE CHEQUE ----------
-     Papel do tamanho do cheque (15 cm x 8,4 cm, sem margens); as medidas contam do canto superior esquerdo. O banco já traz o cheque
-     impresso: só saem os campos vazios. Todas as medidas abaixo são em cm, a partir do canto superior esquerdo.
-       nome ...... 5 cm do topo, 1,7 cm da esquerda
-       quantia ... 0,7 cm abaixo do nome, mesma largura, 2 linhas com 0,5 cm entre linhas
-       valor ..... alinhado à direita, a 0,5 cm da borda direita      data ..... idem, a 0,3 cm
-     (topo do nome/quantia = distância até ao topo das letras; --ajuste-letra compensa o espaço acima da letra) */
-  #print-cheque{display:none;}
-  .chq{position:relative;width:15cm;height:8.4cm;color:#000;background:#fff;
-       --ajuste-letra:0.07cm; --largura-campo:12.2cm;}
-  .chq > div{
-    position:absolute;box-sizing:border-box;padding:0;
-    font-family:'Arial Narrow',ArialNarrow,'Liberation Sans Narrow','Nimbus Sans Narrow',Arial,sans-serif;
-    font-size:14pt;line-height:0.5cm;white-space:pre;
-  }
-  #chq-benef  {left:1.7cm; top:calc(5cm - var(--ajuste-letra)); width:var(--largura-campo); height:0.5cm; text-align:left;}
-  #chq-extenso{left:1.7cm; top:calc(5.7cm - var(--ajuste-letra)); width:var(--largura-campo); height:1cm;
-               white-space:normal;text-align:justify;}
-  #chq-valor  {right:0.5cm; top:2.01cm; height:0.635cm; line-height:0.635cm; text-align:right;}
-  #chq-local  {left:8.49cm; top:3.09cm; width:5.5cm;    height:0.635cm; line-height:0.635cm; text-align:center;}
-  #chq-data   {right:0.3cm; top:3.96cm; height:0.635cm; line-height:0.635cm; text-align:right;}
-  @media print{
-    @page{size:150mm 84mm;margin:0;}   /* o papel é do tamanho do cheque: 15 cm x 8,4 cm */
-    html,body{margin:0 !important;padding:0 !important;background:#fff !important;}
-    body.imprimir-cheque > *:not(#print-cheque){display:none !important;}
-    body.imprimir-cheque #print-cheque{display:block;position:absolute;left:0;top:0;}
-  }
+
+  /* ---------- dashboard ---------- */
+  .dash-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
+  .dash-filtros{display:flex;align-items:center;gap:8px;}
+  .dash-filtros select{height:36px;width:auto;}
+  .dash-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px;}
+  .dash-kpis .kpi{text-align:center;}
+  .dash-kpis .k-value{font-size:19px;}
+  .dash-kpis .k-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+  .dash-kpis .k-value.neg{color:var(--danger);} .dash-kpis .k-value.ok{color:var(--ok);} .dash-kpis .k-value.warn{color:var(--warn);}
+  .dash-gap{margin-top:14px;}
+  @media (max-width:900px){ .dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .dash-leg{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:0 0 8px;}
+  .dash-leg i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;}
+  svg.dash-svg{width:100%;height:auto;display:block;}
+  svg.dash-svg text{font-family:inherit;font-size:11px;fill:var(--muted);}
+  .dash-barra{display:flex;align-items:center;gap:10px;margin:9px 0;font-size:13px;}
+  .dash-barra .rot{width:110px;color:var(--muted);flex:none;}
+  .dash-barra .trilho{flex:1;height:16px;background:var(--card-2);}
+  .dash-barra .trilho i{display:block;height:100%;}
+  .dash-barra .val{width:130px;text-align:right;flex:none;font-variant-numeric:tabular-nums;}
+  .dash-pilha{display:flex;height:22px;background:var(--card-2);margin:4px 0 12px;}
+  .dash-pilha i{display:block;height:100%;}
+  tr.dash-linha{cursor:pointer;}
+  tr.dash-linha:hover td{background:var(--accent-soft);}
 </style>
 
 </head>
@@ -472,7 +470,7 @@
   </div>
   <div class="side-group">
     <div class="side-title">Relatórios</div>
-    <button class="side-link" data-view="resumo" onclick="mudarVista('resumo')">Resumo mensal</button>
+    <button class="side-link" data-view="resumo" onclick="mudarVista('resumo')">Dashboard</button>
   </div>
   <div class="side-group">
     <div class="side-title">Administração</div>
@@ -812,7 +810,7 @@
     <div class="grid-eq">
       <section class="panel">
           <h2>Exportar prestações pendentes</h2>
-          <div class="empty">Gera um Excel com uma linha por pessoa (colunas ID, NIF, Nome, Valor): só a próxima prestação por pagar. Se a pessoa tiver mais de um empréstimo ativo, as prestações são somadas numa só linha. Preenche Data Pagamento (e Valor Pago, se for diferente) e reimporta ao lado.</div>
+          <div class="empty">Gera um Excel com uma linha por pessoa (colunas ID, NIF, Nome, Valor): só a próxima prestação por pagar. Se essa prestação estiver parcial, o valor é o que falta dela mais a prestação seguinte. Se a pessoa tiver mais de um empréstimo ativo, os valores são somados numa só linha. Preenche Data Pagamento (e Valor Pago, se for diferente) e reimporta ao lado.</div>
           <button class="ghost" onclick="exportarPendentes()">Exportar para Excel</button>
         </section>
       <section class="panel gestao-only">
@@ -852,6 +850,9 @@
         <div>
           <label for="cfg-local-emissao">Local de emissão</label>
           <input id="cfg-local-emissao" placeholder="Praia">
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button type="button" class="ghost" onclick="imprimirChequeTeste()" title="Imprime um cheque de exemplo para conferir as posições com uma régua ou sobre um cheque do banco">Imprimir cheque de teste</button>
         </div>
       </div>
       <div class="row2">
@@ -959,32 +960,57 @@
       </section>
   </div>
 
-  <!-- ==================== VISTA: RESUMO MENSAL ==================== -->
+  <!-- ==================== VISTA: DASHBOARD ==================== -->
   <div class="view" id="view-resumo">
     <section class="panel">
-      <h2>Resumo mensal</h2>
-      <div class="empty">Total emprestado e total recebido em cada mês, com base na data de início dos empréstimos e na data de pagamento das prestações.</div>
-      <table>
-        <thead><tr><th>Mês</th><th class="num">Emprestado</th><th class="num">Recebido</th><th style="width:120px;"></th><th style="width:120px;"></th></tr></thead>
-        <tbody id="resumo-body"></tbody>
-      </table>
-      <div class="empty" id="resumo-vazio" style="display:none">Ainda não há dados suficientes.</div>
+      <h2>Dashboard</h2>
+      <div class="dash-topo">
+        <div class="empty" style="padding:0;">Visão geral da carteira de empréstimos. Os empréstimos anulados não entram nos valores.</div>
+        <div class="dash-filtros">
+          <label for="dash-periodo" style="margin:0;">Período</label>
+          <select id="dash-periodo" onchange="renderDashboard()">
+            <option value="6">Últimos 6 meses</option>
+            <option value="12" selected>Últimos 12 meses</option>
+            <option value="24">Últimos 24 meses</option>
+            <option value="ano">Este ano</option>
+            <option value="tudo">Todo o período</option>
+          </select>
+          <button type="button" class="ghost" onclick="carregarResumoMensal()">Atualizar</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="dash-kpis" id="dash-kpis"></div>
+
+    <section class="panel">
+      <h2>Emprestado, previsto e recebido por mês</h2>
+      <div id="dash-mensal"></div>
+    </section>
+
+    <div class="grid-eq dash-gap">
+      <section class="panel"><h2>Carteira por estado</h2><div id="dash-estados"></div></section>
+      <section class="panel"><h2>Atrasos por antiguidade</h2><div id="dash-aging"></div></section>
+    </div>
+
+    <div class="grid-eq dash-gap">
+      <section class="panel"><h2>A receber nos próximos 6 meses</h2><div id="dash-futuro"></div></section>
+      <section class="panel"><h2>Maiores saldos em dívida</h2><div id="dash-top-saldo"></div></section>
+    </div>
+
+    <section class="panel">
+      <h2>Maiores atrasos</h2>
+      <div id="dash-top-atraso"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Detalhe mensal</h2>
+      <div id="dash-detalhe"></div>
     </section>
   </div>
 </main>
 </div>
 </div>
 <!-- fim #app-content -->
-<div id="print-cheque">
-  <div class="chq">
-    <div id="chq-valor"></div>
-    <div id="chq-local"></div>
-    <div id="chq-data"></div>
-    <div id="chq-benef"></div>
-    <div id="chq-extenso"></div>
-  </div>
-</div>
-
 <div id="toasts" aria-live="polite"></div>
 <div class="fm-wrap" id="pagar-wrap">
   <div class="float-menu" id="pagar-menu">
@@ -2139,45 +2165,229 @@ function simular(){
   fmCloseAll();
 }
 
+/* ---------- DASHBOARD ---------- */
+const MESES_ABR = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const COR_DASH = { azul:'#265b88', azulClaro:'#9fb9d2', amarelo:'#f2a900', ok:'#059669', perigo:'#E11D48', cinza:'#94a3b8' };
+let dashCache = null;
+
 async function carregarResumoMensal(){
   if (!requireConn()) return;
-  const { data: emprestimos } = await sb.from('emprestimos').select('data_inicio, valor_emprestimo');
-  const { data: prestacoes } = await sb.from('mapa_amortizacao').select('*');
+  const { data: emps, error } = await sb.from('emprestimos').select('*, pessoas(nome)');
+  if (error){ log('Erro: ' + error.message, true); return; }
+  const { data: prest, error: e2 } = await buscarTodasPrestacoes();
+  if (e2){ log('Erro: ' + e2.message, true); return; }
+  dashCache = { emps: emps || [], prest: prest || [] };
+  renderDashboard();
+}
 
-  const meses = new Map(); // 'YYYY-MM' -> { emprestado, recebido }
-  const mesDe = s => (s || '').slice(0, 7);
+function dashEsc(t){ return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function dashAddMes(ym, n){
+  let [y, m] = ym.split('-').map(Number); m += n;
+  y += Math.floor((m - 1) / 12); m = ((m - 1) % 12 + 12) % 12 + 1;
+  return y + '-' + String(m).padStart(2, '0');
+}
+function dashRotuloMes(ym){ return MESES_ABR[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(2, 4); }
+function dashCurto(n){
+  n = Math.round(Number(n));
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1).replace('.', ',').replace(',0', '') + ' M';
+  if (Math.abs(n) >= 1e3){ const v = n / 1e3; return (Number.isInteger(v) ? v : v.toFixed(1).replace('.', ',')) + ' mil'; }
+  return fmt(n);
+}
+function dashMaxBonito(max){
+  if (max <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(max))), norm = max / mag;
+  return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+}
+function dashLegenda(itens){
+  return '<div class="dash-leg">' + itens.map(i => '<span><i style="background:' + i.cor + '"></i>' + dashEsc(i.nome) + '</span>').join('') + '</div>';
+}
 
-  (emprestimos || []).forEach(e => {
-    const m = mesDe(e.data_inicio);
-    if (!m) return;
-    if (!meses.has(m)) meses.set(m, { emprestado: 0, recebido: 0 });
-    meses.get(m).emprestado += Number(e.valor_emprestimo);
+// barras agrupadas (várias séries) + linha opcional; rotulos = meses
+function dashSvgBarras(rotulos, series, linha, W, H){
+  W = W || 900; H = H || 290;
+  const ml = 56, mr = 14, mt = 12, mb = 30, n = rotulos.length;
+  const todos = [].concat(...series.map(x => x.valores), linha ? linha.valores : []);
+  const max = dashMaxBonito(Math.max(0, ...todos));
+  const iw = W - ml - mr, ih = H - mt - mb, gw = iw / n;
+  const bw = Math.max(3, Math.min(26, gw * 0.7 / series.length));
+  const y = v => mt + ih - (v / max) * ih;
+  let o = '<svg class="dash-svg" viewBox="0 0 ' + W + ' ' + H + '" role="img">';
+  for (let i = 0; i <= 5; i++){
+    const v = max * i / 5, yy = y(v);
+    o += '<line x1="' + ml + '" x2="' + (W - mr) + '" y1="' + yy + '" y2="' + yy + '" stroke="#e5e7eb"/><text x="' + (ml - 8) + '" y="' + (yy + 4) + '" text-anchor="end">' + dashCurto(v) + '</text>';
+  }
+  const passo = n > 36 ? 4 : n > 18 ? 2 : 1;
+  rotulos.forEach((r, i) => {
+    const cx = ml + gw * i + gw / 2;
+    series.forEach((sr, k) => {
+      const v = sr.valores[i], x = cx - (bw * series.length) / 2 + bw * k, h = (v / max) * ih;
+      o += '<rect x="' + x.toFixed(1) + '" y="' + y(v).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(0, h).toFixed(1) + '" fill="' + sr.cor + '"><title>' + dashEsc(r.t) + ' — ' + dashEsc(sr.nome) + ': ' + fmt(v) + '</title></rect>';
+    });
+    if (i % passo === 0) o += '<text x="' + cx.toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle">' + dashEsc(r.l) + '</text>';
   });
-  (prestacoes || []).forEach(p => {
-    const v = valorPagoPrestacao(p);
-    if (v <= 0.004) return;
-    const m = mesDe(p.data_pagamento);
-    if (!m) return;
-    if (!meses.has(m)) meses.set(m, { emprestado: 0, recebido: 0 });
-    meses.get(m).recebido += v;
+  if (linha){
+    const pts = linha.valores.map((v, i) => [ml + gw * i + gw / 2, y(v)]);
+    o += '<polyline fill="none" stroke="' + linha.cor + '" stroke-width="2.2" points="' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '"/>';
+    pts.forEach((p, i) => { o += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3.4" fill="' + linha.cor + '"><title>' + dashEsc(rotulos[i].t) + ' — ' + dashEsc(linha.nome) + ': ' + fmt(linha.valores[i]) + '</title></circle>'; });
+  }
+  return o + '</svg>';
+}
+function dashBarraH(rot, valor, max, cor, texto){
+  const pct = max > 0 ? Math.max(valor > 0 ? 2 : 0, valor * 100 / max) : 0;
+  return '<div class="dash-barra"><div class="rot">' + dashEsc(rot) + '</div><div class="trilho"><i style="width:' + pct.toFixed(1) + '%;background:' + cor + '"></i></div><div class="val">' + dashEsc(texto) + '</div></div>';
+}
+function dashKpi(rot, valor, sub, classe){
+  return '<div class="kpi"><div class="k-label">' + dashEsc(rot) + '</div><div class="k-value ' + (classe || '') + '">' + dashEsc(valor) + '</div><div class="k-sub">' + dashEsc(sub || '') + '</div></div>';
+}
+
+function renderDashboard(){
+  if (!dashCache) return;
+  const hojeS = hoje(), mesAtual = hojeS.slice(0, 7), msDia = 86400000;
+  const porEmp = new Map();
+  dashCache.prest.forEach(p => { if (!porEmp.has(p.emprestimo_id)) porEmp.set(p.emprestimo_id, []); porEmp.get(p.emprestimo_id).push(p); });
+
+  // ---- período escolhido ----
+  const sel = document.getElementById('dash-periodo').value;
+  let inicio;
+  if (sel === 'tudo'){
+    const todos = dashCache.emps.map(e => (e.data_inicio || '').slice(0, 7)).concat(dashCache.prest.map(p => (p.data_pagamento || '').slice(0, 7))).filter(Boolean).sort();
+    inicio = todos.length ? todos[0] : mesAtual;
+    if (inicio > mesAtual) inicio = mesAtual;
+  } else if (sel === 'ano') inicio = mesAtual.slice(0, 4) + '-01';
+  else inicio = dashAddMes(mesAtual, -(Number(sel) - 1));
+  const meses = [];
+  for (let m = inicio; m <= mesAtual; m = dashAddMes(m, 1)) meses.push(m);
+  const M = new Map(meses.map(m => [m, { emprestado: 0, novos: 0, previsto: 0, recebido: 0, juros: 0 }]));
+
+  // ---- acumuladores da carteira ----
+  const pessoas = new Map();
+  const est = { dia: { n: 0, saldo: 0 }, atraso: { n: 0, saldo: 0 }, pago: { n: 0, saldo: 0 }, liquidado: { n: 0, saldo: 0 } };
+  const aging = [{ rot: '1 a 30 dias', v: 0, n: 0 }, { rot: '31 a 60 dias', v: 0, n: 0 }, { rot: '61 a 90 dias', v: 0, n: 0 }, { rot: 'Mais de 90 dias', v: 0, n: 0 }];
+  const futuro = new Map(); for (let i = 0; i < 6; i++) futuro.set(dashAddMes(mesAtual, i), 0);
+  let totEmprestado = 0, nEmps = 0, nAnulados = 0, carteira = 0, saldoComAtraso = 0, atrasoValor = 0, atrasoPrest = 0, nEmpAtraso = 0, nAtivos = 0;
+
+  dashCache.emps.forEach(emp => {
+    const linhas = porEmp.get(emp.id) || [];
+    const estado = estadoFinalEmprestimo(emp, linhas);
+    if (estado === 'ANULADO'){ nAnulados++; return; }
+    nEmps++; totEmprestado += Number(emp.valor_emprestimo);
+    const mi = (emp.data_inicio || '').slice(0, 7);
+    if (M.has(mi)){ M.get(mi).emprestado += Number(emp.valor_emprestimo); M.get(mi).novos++; }
+
+    const liquidado = estado === 'LIQUIDADO';
+    let saldo = 0, atrasoEmp = 0, maxDias = 0, nAtrasoEmp = 0;
+    linhas.forEach(l => {
+      const pago = valorPagoPrestacao(l), prest = Number(l.valor_prestacao), juro = Number(l.valor_juro || 0);
+      const mp = (l.data_pagamento || '').slice(0, 7);
+      if (pago > 0.004 && M.has(mp)){
+        const m = M.get(mp); m.recebido += pago; if (prest > 0) m.juros += pago * juro / prest;
+      }
+      if (liquidado && pago <= 0.004) return;                      // prestações que ficaram por pagar numa liquidação não contam
+      const mv = (l.data_vencimento || '').slice(0, 7);
+      if (l.data_vencimento <= hojeS && M.has(mv)) M.get(mv).previsto += prest;
+      if (liquidado) return;
+      const falta = faltaPrestacao(l);
+      if (falta <= 0) return;
+      saldo += falta;
+      if (estadoPrestacao(l) === 'ATRASADO'){
+        const dias = Math.max(1, Math.floor((new Date(hojeS) - new Date(l.data_vencimento)) / msDia));
+        atrasoEmp += falta; nAtrasoEmp++; maxDias = Math.max(maxDias, dias);
+        const b = dias <= 30 ? 0 : dias <= 60 ? 1 : dias <= 90 ? 2 : 3;
+        aging[b].v += falta; aging[b].n++;
+      } else if (futuro.has(mv)){
+        futuro.set(mv, futuro.get(mv) + falta);
+      }
+    });
+
+    if (!liquidado){
+      carteira += saldo; atrasoValor += atrasoEmp; atrasoPrest += nAtrasoEmp;
+      if (estado !== 'PAGO'){ nAtivos++; }
+      if (atrasoEmp > 0){ nEmpAtraso++; saldoComAtraso += saldo; }
+    }
+    const grupo = liquidado ? est.liquidado : estado === 'PAGO' ? est.pago : atrasoEmp > 0 ? est.atraso : est.dia;
+    grupo.n++; grupo.saldo += saldo;
+
+    const nif = emp.nif;
+    if (!pessoas.has(nif)) pessoas.set(nif, { nif, nome: (emp.pessoas && emp.pessoas.nome) || nif, saldo: 0, ativos: 0, atraso: 0, prestAtraso: 0, maxDias: 0 });
+    const pe = pessoas.get(nif);
+    if (!liquidado){ pe.saldo += saldo; pe.atraso += atrasoEmp; pe.prestAtraso += nAtrasoEmp; pe.maxDias = Math.max(pe.maxDias, maxDias); if (estado !== 'PAGO') pe.ativos++; }
   });
 
-  const ordenados = [...meses.entries()].sort((a, b) => b[0].localeCompare(a[0]));
-  const maxValor = ordenados.reduce((m, [, v]) => Math.max(m, v.emprestado, v.recebido), 0) || 1;
+  // ---- totais do período ----
+  const lista = meses.map(m => M.get(m));
+  const soma = k => lista.reduce((s, x) => s + x[k], 0);
+  const recebidoP = soma('recebido'), previstoP = soma('previsto'), jurosP = soma('juros'), emprestadoP = soma('emprestado');
+  const cobranca = previstoP > 0 ? recebidoP * 100 / previstoP : null;
+  const par = carteira > 0 ? saldoComAtraso * 100 / carteira : 0;
+  const nPessoasAtivas = [...pessoas.values()].filter(p => p.ativos > 0).length;
+  const pct = v => v.toFixed(1).replace('.', ',') + '%';
 
-  const tbody = document.getElementById('resumo-body');
-  tbody.innerHTML = '';
-  document.getElementById('resumo-vazio').style.display = ordenados.length ? 'none' : 'block';
+  // ---- cartões ----
+  document.getElementById('dash-kpis').innerHTML =
+    dashKpi('Carteira em dívida', fmt(carteira), nAtivos + ' empréstimo(s) em curso') +
+    dashKpi('Total emprestado', fmt(totEmprestado), nEmps + ' empréstimo(s) no total') +
+    dashKpi('Recebido no período', fmt(recebidoP), 'Emprestado no período: ' + fmt(emprestadoP)) +
+    dashKpi('Juros recebidos', fmt(jurosP), recebidoP > 0 ? pct(jurosP * 100 / recebidoP) + ' do recebido' : 'no período') +
+    dashKpi('Cobrança', cobranca == null ? '—' : pct(cobranca), 'Recebido ÷ previsto (' + fmt(previstoP) + ')', cobranca == null ? '' : cobranca >= 90 ? 'ok' : cobranca >= 70 ? 'warn' : 'neg') +
+    dashKpi('Valor em atraso', fmt(atrasoValor), atrasoPrest + ' prestação(ões) · ' + nEmpAtraso + ' empréstimo(s)', atrasoValor > 0 ? 'neg' : '') +
+    dashKpi('Risco da carteira', pct(par), 'Saldo com atraso ÷ carteira', par > 15 ? 'neg' : par > 5 ? 'warn' : 'ok') +
+    dashKpi('Pessoas com empréstimo em curso', String(nPessoasAtivas), nAnulados ? nAnulados + ' anulado(s) fora dos valores' : 'sem anulados');
 
-  ordenados.forEach(([mes, v]) => {
-    const tr = document.createElement('tr');
-    const pctEmp = Math.round(v.emprestado * 100 / maxValor);
-    const pctRec = Math.round(v.recebido * 100 / maxValor);
-    tr.innerHTML = `<td>${mes}</td><td class="num">${fmt(v.emprestado)}</td><td class="num">${fmt(v.recebido)}</td>
-      <td><div class="progress" style="height:8px;"><i style="width:${pctEmp}%;background:var(--accent-2);"></i></div></td>
-      <td><div class="progress" style="height:8px;"><i style="width:${pctRec}%;"></i></div></td>`;
-    tbody.appendChild(tr);
+  // ---- gráfico mensal ----
+  const rot = meses.map(m => ({ l: dashRotuloMes(m), t: dashRotuloMes(m) }));
+  const temDados = lista.some(x => x.emprestado || x.previsto || x.recebido);
+  document.getElementById('dash-mensal').innerHTML = temDados
+    ? dashLegenda([{ nome: 'Emprestado', cor: COR_DASH.azulClaro }, { nome: 'Recebido', cor: COR_DASH.azul }, { nome: 'Previsto (prestações vencidas até hoje)', cor: COR_DASH.amarelo }]) +
+      dashSvgBarras(rot, [{ nome: 'Emprestado', cor: COR_DASH.azulClaro, valores: lista.map(x => x.emprestado) }, { nome: 'Recebido', cor: COR_DASH.azul, valores: lista.map(x => x.recebido) }],
+        { nome: 'Previsto', cor: COR_DASH.amarelo, valores: lista.map(x => x.previsto) })
+    : '<div class="empty">Ainda não há dados neste período.</div>';
+
+  // ---- carteira por estado ----
+  const grupos = [['Em dia', est.dia, COR_DASH.ok], ['Em atraso', est.atraso, COR_DASH.perigo], ['Pagos', est.pago, COR_DASH.azul], ['Liquidados', est.liquidado, COR_DASH.cinza]];
+  const totN = grupos.reduce((s, g) => s + g[1].n, 0);
+  document.getElementById('dash-estados').innerHTML = totN
+    ? '<div class="dash-pilha">' + grupos.filter(g => g[1].n).map(g => '<i style="width:' + (g[1].n * 100 / totN).toFixed(2) + '%;background:' + g[2] + '" title="' + g[0] + ': ' + g[1].n + '"></i>').join('') + '</div>' +
+      '<table><thead><tr><th>Estado</th><th class="num">Empréstimos</th><th class="num">%</th><th class="num">Em dívida</th></tr></thead><tbody>' +
+      grupos.map(g => '<tr><td><i style="display:inline-block;width:10px;height:10px;margin-right:8px;background:' + g[2] + '"></i>' + g[0] + '</td><td class="num">' + g[1].n + '</td><td class="num">' + pct(g[1].n * 100 / totN) + '</td><td class="num">' + fmt(g[1].saldo) + '</td></tr>').join('') + '</tbody></table>'
+    : '<div class="empty">Sem empréstimos.</div>';
+
+  // ---- atrasos por antiguidade ----
+  const maxAging = Math.max(...aging.map(a => a.v));
+  document.getElementById('dash-aging').innerHTML = atrasoValor > 0
+    ? aging.map((a, i) => dashBarraH(a.rot, a.v, maxAging, i < 2 ? COR_DASH.amarelo : COR_DASH.perigo, fmt(a.v) + '  (' + a.n + ')')).join('') +
+      '<div class="empty">Entre parêntesis: número de prestações em atraso.</div>'
+    : '<div class="empty">Não há prestações em atraso.</div>';
+
+  // ---- próximos 6 meses ----
+  const fm = [...futuro.keys()], fv = [...futuro.values()];
+  document.getElementById('dash-futuro').innerHTML = fv.some(v => v > 0)
+    ? dashSvgBarras(fm.map(m => ({ l: dashRotuloMes(m), t: dashRotuloMes(m) })), [{ nome: 'A receber', cor: COR_DASH.azul, valores: fv }], null, 460, 250) +
+      '<div class="empty">Total a vencer nestes 6 meses: ' + fmt(fv.reduce((a, b) => a + b, 0)) + '</div>'
+    : '<div class="empty">Não há prestações a vencer nos próximos 6 meses.</div>';
+
+  // ---- tabelas de pessoas ----
+  const linhaPessoa = (p, cols) => '<tr class="dash-linha" data-nif="' + dashEsc(p.nif) + '"><td>' + dashEsc(p.nome) + '</td>' + cols + '</tr>';
+  const topSaldo = [...pessoas.values()].filter(p => p.saldo > 0).sort((a, b) => b.saldo - a.saldo).slice(0, 10);
+  document.getElementById('dash-top-saldo').innerHTML = topSaldo.length
+    ? '<table><thead><tr><th>Pessoa</th><th class="num">Empréstimos</th><th class="num">Em dívida</th><th class="num">% da carteira</th></tr></thead><tbody>' +
+      topSaldo.map(p => linhaPessoa(p, '<td class="num">' + p.ativos + '</td><td class="num">' + fmt(p.saldo) + '</td><td class="num">' + pct(p.saldo * 100 / carteira) + '</td>')).join('') + '</tbody></table>'
+    : '<div class="empty">Não há saldos em dívida.</div>';
+  const topAtraso = [...pessoas.values()].filter(p => p.atraso > 0).sort((a, b) => b.atraso - a.atraso).slice(0, 10);
+  document.getElementById('dash-top-atraso').innerHTML = topAtraso.length
+    ? '<table><thead><tr><th>Pessoa</th><th class="num">Prestações em atraso</th><th class="num">Valor em atraso</th><th class="num">Atraso mais antigo (dias)</th><th class="num">Em dívida</th></tr></thead><tbody>' +
+      topAtraso.map(p => linhaPessoa(p, '<td class="num">' + p.prestAtraso + '</td><td class="num" style="color:var(--danger);font-weight:700;">' + fmt(p.atraso) + '</td><td class="num">' + p.maxDias + '</td><td class="num">' + fmt(p.saldo) + '</td>')).join('') + '</tbody></table>'
+    : '<div class="empty">Não há atrasos.</div>';
+  document.querySelectorAll('#dash-top-saldo tr.dash-linha, #dash-top-atraso tr.dash-linha').forEach(tr => {
+    tr.onclick = () => { document.getElementById('nif').value = tr.dataset.nif; mudarVista('emprestimos'); procurarPessoa(); };
   });
+
+  // ---- detalhe mensal ----
+  const desc = [...meses].reverse();
+  document.getElementById('dash-detalhe').innerHTML = temDados
+    ? '<table><thead><tr><th>Mês</th><th class="num">Novos empréstimos</th><th class="num">Emprestado</th><th class="num">Previsto</th><th class="num">Recebido</th><th class="num">Cobrança</th><th class="num">Juros recebidos</th></tr></thead><tbody>' +
+      desc.map(m => { const x = M.get(m); return '<tr><td>' + m + '</td><td class="num">' + x.novos + '</td><td class="num">' + fmt(x.emprestado) + '</td><td class="num">' + fmt(x.previsto) + '</td><td class="num">' + fmt(x.recebido) + '</td><td class="num">' + (x.previsto > 0 ? pct(x.recebido * 100 / x.previsto) : '—') + '</td><td class="num">' + fmt(x.juros) + '</td></tr>'; }).join('') +
+      '</tbody><tfoot><tr><td><strong>Total</strong></td><td class="num"><strong>' + soma('novos') + '</strong></td><td class="num"><strong>' + fmt(emprestadoP) + '</strong></td><td class="num"><strong>' + fmt(previstoP) + '</strong></td><td class="num"><strong>' + fmt(recebidoP) + '</strong></td><td class="num"><strong>' + (cobranca == null ? '—' : pct(cobranca)) + '</strong></td><td class="num"><strong>' + fmt(jurosP) + '</strong></td></tr></tfoot></table>'
+    : '<div class="empty">Ainda não há dados neste período.</div>';
 }
 
 async function criarEmprestimo(){
@@ -3030,6 +3240,24 @@ async function registarPagamentoManual(){
   await emitirRecibos([{ aplicados: res.aplicados, dataPag }]);
 }
 
+// Valor a pagar no mês de um empréstimo, a partir das prestações por pagar (por ordem):
+// a próxima prestação; se essa estiver parcial, o que falta dela mais a prestação seguinte.
+function valorDevidoMes(pend){
+  if (!pend.length) return 0;
+  let v = faltaPrestacao(pend[0]);
+  if (valorPagoPrestacao(pend[0]) > 0.004 && pend[1]) v += faltaPrestacao(pend[1]);
+  return v;
+}
+// o mesmo, partindo só da prestação (vai buscar a seguinte à base de dados se a primeira estiver parcial)
+async function devidoDoMesLinha(row){
+  let v = faltaPrestacao(row);
+  if (valorPagoPrestacao(row) > 0.004){
+    const r = await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', row.emprestimo_id)
+      .neq('estado', 'PAGO').gt('numero_prestacao', row.numero_prestacao).order('numero_prestacao').limit(1);
+    if (!r.error && r.data && r.data[0]) v += faltaPrestacao(r.data[0]);
+  }
+  return v;
+}
 async function exportarPendentes(){
   if (!requireConn()) return;
   // todas as prestações por pagar (em páginas, para não ficar pelo limite de 1000 linhas)
@@ -3043,22 +3271,26 @@ async function exportarPendentes(){
     if (data.length < 1000) break;
   }
 
-  // a próxima prestação por pagar de cada empréstimo ativo
-  const proxima = new Map();
+  // prestações por pagar de cada empréstimo ativo, por ordem
+  const pendPorEmp = new Map();
   pend.forEach(r => {
     if (!r.emprestimos || (r.emprestimos.estado || 'ATIVO') !== 'ATIVO') return;
-    const atual = proxima.get(r.emprestimo_id);
-    if (!atual || r.numero_prestacao < atual.numero_prestacao) proxima.set(r.emprestimo_id, r);
+    if (!pendPorEmp.has(r.emprestimo_id)) pendPorEmp.set(r.emprestimo_id, []);
+    pendPorEmp.get(r.emprestimo_id).push(r);
   });
+  pendPorEmp.forEach(l => l.sort((a, b) => a.numero_prestacao - b.numero_prestacao));
 
-  // junta por NIF: se houver mais de um empréstimo, soma os valores
+  // junta por NIF: se houver mais de um empréstimo, soma os valores.
+  // Se a próxima prestação de um empréstimo estiver parcial, entra o que falta dela + a prestação seguinte.
   const porNif = new Map();
-  proxima.forEach(r => {
+  pendPorEmp.forEach(lista => {
+    const r = lista[0];
     const nif = r.emprestimos.nif;
-    if (!porNif.has(nif)) porNif.set(nif, { nif, nome: r.emprestimos.pessoas ? r.emprestimos.pessoas.nome : '', ids: [], valor: 0, venc: r.data_vencimento });
+    if (!porNif.has(nif)) porNif.set(nif, { nif, nome: r.emprestimos.pessoas ? r.emprestimos.pessoas.nome : '', ids: [], valor: 0, venc: r.data_vencimento, parcial: false });
     const g = porNif.get(nif);
     g.ids.push(r.id);
-    g.valor += faltaPrestacao(r);
+    if (valorPagoPrestacao(r) > 0.004 && lista[1]){ g.ids.push(lista[1].id); g.parcial = true; }
+    g.valor += valorDevidoMes(lista);
     if (r.data_vencimento < g.venc) g.venc = r.data_vencimento;
   });
 
@@ -3069,12 +3301,13 @@ async function exportarPendentes(){
     'Nome': g.nome,
     'Valor': arred(g.valor),
     'Data Pagamento': '',
-    'Valor Pago': ''
+    'Valor Pago': '',
+    'Obs.': g.parcial ? 'Parcial + prestação seguinte' : ''
   }));
   if (!linhas.length){ log('Não há prestações pendentes para exportar.'); return; }
 
   const ws = XLSX.utils.json_to_sheet(linhas);
-  ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 14 }];
+  ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 30 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Prestações Pendentes');
   XLSX.writeFile(wb, 'prestacoes_pendentes.xlsx');
@@ -3142,10 +3375,12 @@ async function importarPagamentosExcel(){
       const informado = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : null;
       let resp;
       if (multi){
-        const devido = arred(multi.reduce((s, o) => s + faltaPrestacao(o.row), 0));
+        let somaDevido = 0;
+        for (const o of multi) somaDevido += await devidoDoMesLinha(o.row);
+        const devido = arred(somaDevido);
         resp = await aplicarPagamentoPessoa(nif, multi, informado !== null ? informado : devido, dataPag, ' — importado de Excel');
       } else {
-        resp = await aplicarPagamento(row, informado !== null ? informado : faltaPrestacao(row), dataPag, ' — importado de Excel');
+        resp = await aplicarPagamento(row, informado !== null ? informado : arred(await devidoDoMesLinha(row)), dataPag, ' — importado de Excel');
       }
       if (resp.erro){ erros.push('Linha ' + lin + ': ' + resp.erro); continue; }
       if (resp.sobra > 0.01) avisos.push('Linha ' + lin + ': sobraram ' + fmt(resp.sobra) + ' sem prestação onde aplicar');
@@ -3289,18 +3524,57 @@ function chequeDigitos(txt, espacos, frente){
   if (d.length > n) casas[0] = d.slice(0, d.length - n + 1);
   return ' '.repeat(frente) + casas.map((c, i) => c + ' '.repeat(espacos[i])).join('');
 }
-function imprimirCheque(c){
-  document.getElementById('chq-valor').textContent  = chequeDigitos(Math.round(c.valor), [2,2,2,3,3,3,3,3,3,2], 0);
-  document.getElementById('chq-local').textContent  = ' '.repeat(13) + (cfg.localEmissao || 'Praia');
-  document.getElementById('chq-data').textContent   = chequeDigitos(c.data_emissao || '', [2,2,2,3,3,3,3,3,3,1], 1);
-  document.getElementById('chq-benef').textContent  = c.beneficiario || '';
+/* Cheque: imprime num documento isolado (iframe), com papel de 15 cm x 8,4 cm, margens 0 e sem título,
+   para o navegador não acrescentar cabeçalho nem rodapé. O banco já traz o cheque impresso: só saem os campos vazios.
+   Medidas em cm a partir do canto superior esquerdo (as alturas contam até à LINHA onde o texto assenta):
+     nome: linha a 5 cm do topo, a 1,7 cm da esquerda
+     quantia: 1.ª linha 0,7 cm abaixo da linha do nome (5,7 cm), 2.ª linha 0,5 cm abaixo da 1.ª (6,2 cm), mesma largura e esquerda
+     valor: alinhado à direita, a 0,5 cm da borda direita | data: alinhada à direita, a 0,3 cm da borda direita
+   A posição do nome e da quantia é acertada em ajustarBaseCheque() medindo a linha de base real do texto. */
+const CSS_CHEQUE = '@page{size:150mm 84mm;margin:0}' +
+  'html,body{margin:0;padding:0;background:#fff;}' +
+  '.chq{position:absolute;left:0;top:0;width:15cm;height:8.4cm;color:#000;--largura-campo:12.2cm;}' +
+  '.chq > div{position:absolute;box-sizing:border-box;padding:0;font-family:"Arial Narrow",ArialNarrow,"Liberation Sans Narrow","Nimbus Sans Narrow",Arial,sans-serif;font-size:14pt;line-height:0.5cm;white-space:pre;}' +
+  '.b{display:inline-block;width:0;height:0;}' +
+  '#chq-benef{left:1.7cm;top:0;width:var(--largura-campo);height:0.5cm;text-align:left;}' +
+  '#chq-extenso{left:1.7cm;top:0;width:var(--largura-campo);height:1cm;white-space:normal;text-align:justify;}' +
+  '#chq-valor{right:0.5cm;top:2.01cm;height:0.635cm;line-height:0.635cm;text-align:right;}' +
+  '#chq-local{left:8.49cm;top:3.09cm;width:5.5cm;height:0.635cm;line-height:0.635cm;text-align:center;}' +
+  '#chq-data{right:0.3cm;top:3.96cm;height:0.635cm;line-height:0.635cm;text-align:right;}';
+function htmlCheque(c){
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const ext = numeroPorExtenso(c.valor);
-  document.getElementById('chq-extenso').textContent = ext.charAt(0).toLowerCase() + ext.slice(1);   // como no modelo: começa em minúscula
-  document.body.classList.add('imprimir-cheque');
-  window.print();
-  document.body.classList.remove('imprimir-cheque');
+  const campos = {
+    'chq-valor':   chequeDigitos(Math.round(c.valor), [2,2,2,3,3,3,3,3,3,2], 0),
+    'chq-local':   ' '.repeat(13) + (cfg.localEmissao || 'Praia'),
+    'chq-data':    chequeDigitos(c.data_emissao || '', [2,2,2,3,3,3,3,3,3,1], 1),
+    'chq-benef':   c.beneficiario || '',
+    'chq-extenso': ext.charAt(0).toLowerCase() + ext.slice(1)       // como no modelo: começa em minúscula
+  };
+  return '<!doctype html><html lang="pt"><head><meta charset="utf-8"><title> </title><style>' + CSS_CHEQUE + '</style></head><body><div class="chq">' +
+    Object.keys(campos).map(id => '<div id="' + id + '">' + (id === 'chq-benef' || id === 'chq-extenso' ? '<span class="b"></span>' : '') + esc(campos[id]) + '</div>').join('') + '</div></body></html>';
 }
-window.addEventListener('afterprint', () => document.body.classList.remove('imprimir-cheque'));
+// Põe a linha de base do nome em 5 cm e a da 1.ª linha da quantia em 5,7 cm (a 2.ª fica 0,5 cm abaixo, pelo line-height),
+// medindo onde o texto assenta de facto com a fonte que o computador usar.
+function ajustarBaseCheque(doc){
+  const px = cm => cm * 96 / 2.54;
+  [['chq-benef', 5], ['chq-extenso', 5.7]].forEach(([id, cm]) => {
+    const el = doc.getElementById(id), sonda = el.querySelector('.b');
+    const base = sonda.getBoundingClientRect().bottom - el.getBoundingClientRect().top;   // do topo da caixa até à linha de base
+    el.style.top = (px(cm) - base) + 'px';
+  });
+}
+// cheque de exemplo (valor 93 979 356) para conferir as posições em papel normal, sobre um cheque ou com uma régua
+function imprimirChequeTeste(){
+  imprimirCheque({ valor: 93979356, data_emissao: hoje(), beneficiario: 'NOME DO BENEFICIÁRIO (TESTE)' });
+}
+function imprimirCheque(c){
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(f);
+  f.contentDocument.open(); f.contentDocument.write(htmlCheque(c)); f.contentDocument.close();
+  setTimeout(() => { ajustarBaseCheque(f.contentDocument); f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300);
+}
 </script>
 </body>
 </html>
