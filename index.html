@@ -406,6 +406,29 @@
   .dash-pilha i{display:block;height:100%;}
   tr.dash-linha{cursor:pointer;}
   tr.dash-linha:hover td{background:var(--accent-soft);}
+
+  /* ---------- telemóvel: tabelas com deslize horizontal ---------- */
+  @media (max-width:700px){
+    table{display:block;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;}
+    input,select,textarea{font-size:16px;}   /* evita o zoom automático do iPhone ao tocar num campo */
+  }
+
+  /* ---------- pré-visualização da importação ---------- */
+  #modal-import{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(20,24,32,.55);}
+  #modal-import.open{display:flex;}
+  .modal-largo{max-width:980px;max-height:90vh;display:flex;flex-direction:column;}
+  .mi-tabela{overflow:auto;border:1px solid var(--line);flex:1;min-height:120px;}
+  .mi-tabela table{display:table;white-space:normal;}
+  .mi-tabela th{position:sticky;top:0;background:var(--card-2);}
+  #mi-ok:disabled{opacity:.5;cursor:not-allowed;}
+
+  .btn-link{color:var(--accent);font-weight:700;text-decoration:none;font-size:12.5px;}
+  .btn-link:hover{text-decoration:underline;}
+
+  .dash-kpis .k-sub.sub-ok{color:var(--ok);font-weight:700;} .dash-kpis .k-sub.sub-neg{color:var(--danger);font-weight:700;}
+
+  #modal-senha{position:fixed;inset:0;z-index:210;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(20,24,32,.6);}
+  #modal-senha.open{display:flex;}
 </style>
 
 </head>
@@ -582,7 +605,10 @@
           <div id="pessoa-limite-txt" class="nif-txt"></div>
         </div>
       </div>
-      <button class="small ghost gestao-only" style="margin-top:10px;" onclick="mostrarEditarPessoa()">Editar</button>
+      <div class="btn-row gestao-only" style="margin-top:10px;gap:8px;">
+        <button class="small ghost" onclick="mostrarEditarPessoa()">Editar</button>
+        <button class="small ghost" onclick="lembreteWhatsAppPessoa()" title="Abre o WhatsApp com uma mensagem de cobrança ou de lembrete já escrita">Lembrete WhatsApp</button>
+      </div>
     </div>
 
         <section class="panel" id="lista-panel" style="display:none">
@@ -646,6 +672,34 @@
             <thead><tr><th>#</th><th>Vencimento</th><th class="num">Prestação</th><th class="num">Juro</th><th class="num">Capital</th><th class="num">Em dívida</th><th class="num">Pago</th><th class="num">Em falta</th><th>Estado</th><th></th></tr></thead>
             <tbody id="mapa-body"></tbody>
           </table>
+        </section>
+
+        <section class="panel" id="docs-section" style="display:none">
+          <h2>Documentos deste empréstimo <small id="docs-sub"></small></h2>
+          <div class="empty" style="padding-top:0;">Os ficheiros ficam no Google Drive; aqui guarda-se só o link. Para documentos sensíveis (cópia de cheque, pedido de empréstimo) partilhe no Drive apenas com as pessoas que precisam, em vez de "qualquer pessoa com o link".</div>
+          <div id="docs-lista"></div>
+          <div id="docs-sql" style="display:none;margin-top:10px;">
+            <div class="empty" style="color:var(--warn);">Falta criar a tabela dos documentos no Supabase. Abra o SQL Editor, cole o texto abaixo e execute (uma única vez):</div>
+            <textarea id="docs-sql-texto" readonly rows="14" style="font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+            <div class="btn-row"><button type="button" class="ghost" onclick="copiarSqlDocumentos()">Copiar SQL</button></div>
+          </div>
+          <div id="docs-novo" class="gestao-only">
+            <hr class="divider">
+            <div class="row2">
+              <div>
+                <label for="doc-tipo">Tipo</label>
+                <select id="doc-tipo">
+                  <option>Cópia de cheque</option>
+                  <option>Pedido de empréstimo</option>
+                  <option>Outros</option>
+                </select>
+              </div>
+              <div><label for="doc-desc">Descrição (opcional)</label><input id="doc-desc" placeholder="Ex.: cheque nº 123 do BCA"></div>
+            </div>
+            <label for="doc-url">Link do Google Drive</label>
+            <input id="doc-url" type="url" placeholder="https://drive.google.com/...">
+            <div class="btn-row"><button type="button" onclick="adicionarDocumento()">Adicionar documento</button></div>
+          </div>
         </section>
   </div>
 
@@ -835,6 +889,15 @@
   <!-- ==================== VISTA: UTILIZADORES ==================== -->
   <div class="view" id="view-utilizadores">
     <section class="panel gestao-only">
+      <h2>Cópia de segurança</h2>
+      <div class="empty" style="padding:0 0 12px;">Descarrega um ficheiro Excel com todos os dados: pessoas, empréstimos, mapas de amortização, banco, cheques e documentos. Guarde-o num sítio seguro (por exemplo, no Google Drive da Fundação) e repita de vez em quando.</div>
+      <div class="dash-filtros">
+        <button type="button" onclick="exportarTudo()">Exportar tudo (Excel)</button>
+        <span id="backup-ultima" class="empty" style="padding:0;"></span>
+      </div>
+      <div class="empty" id="backup-estado" style="padding-top:8px;"></div>
+    </section>
+    <section class="panel gestao-only">
       <h2>Definições dos cheques</h2>
       <div class="row2">
         <div>
@@ -876,11 +939,14 @@
 
     <section class="panel gestao-only">
       <h2>Criar utilizador</h2>
-      <div class="empty">O utilizador entra diretamente com este nome (ou email) e a palavra-passe — não precisa de se registar nem de confirmar email. Podes usar só um nome, por exemplo «Maria Silva»; para entrar escreve o mesmo nome (maiúsculas e acentos são ignorados).</div>
+      <div class="empty">O utilizador entra diretamente com este nome (ou email) e a palavra-passe — não precisa de se registar nem de confirmar email. Podes usar só um nome, por exemplo «Maria Silva»; para entrar escreve o mesmo nome (maiúsculas e acentos são ignorados). No primeiro acesso a pessoa tem de escolher uma palavra-passe nova, e depois só pode alterar a sua palavra-passe: só a gestão cria utilizadores e muda perfis.</div>
       <label for="nu-email">Nome de utilizador ou email</label>
       <input id="nu-email" type="text" placeholder="Maria Silva  ou  email@exemplo.com" autocomplete="off">
-      <label for="nu-pass">Palavra-passe inicial</label>
-      <input id="nu-pass" type="password" placeholder="mínimo 6 caracteres">
+      <label for="nu-pass">Palavra-passe inicial (temporária)</label>
+      <div class="inline-field">
+        <input id="nu-pass" type="text" placeholder="mínimo 10 caracteres" autocomplete="off">
+        <button type="button" class="ghost" onclick="gerarPasswordInicial()">Gerar</button>
+      </div>
       <label for="nu-papel">Perfil</label>
       <select id="nu-papel">
         <option value="consulta">Consulta</option>
@@ -907,7 +973,7 @@
       <h2>A minha conta</h2>
       <div class="empty">A tua sessão está associada à conta <strong id="conta-email"></strong>.</div>
       <label for="np-pass1">Nova palavra-passe</label>
-      <input id="np-pass1" type="password" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+      <input id="np-pass1" type="password" placeholder="mínimo 10 caracteres" autocomplete="new-password">
       <label for="np-pass2">Confirmar nova palavra-passe</label>
       <input id="np-pass2" type="password" placeholder="repete a palavra-passe" autocomplete="new-password">
       <button onclick="alterarPassword()">Alterar palavra-passe</button>
@@ -976,6 +1042,7 @@
             <option value="tudo">Todo o período</option>
           </select>
           <button type="button" class="ghost" onclick="carregarResumoMensal()">Atualizar</button>
+          <button type="button" class="btn-icon btn-pdf" onclick="exportarDashboardPdf()" title="Exportar o dashboard em PDF" aria-label="Exportar o dashboard em PDF"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2.5H6a1 1 0 0 0-1 1v17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5z"/><path d="M14 2.5v5h5"/><text x="12" y="17.2" text-anchor="middle" font-size="6.4" font-weight="800" fill="#fff" stroke="none" font-family="Arial,sans-serif">PDF</text></svg></button>
         </div>
       </div>
     </section>
@@ -1000,6 +1067,29 @@
     <section class="panel">
       <h2>Maiores atrasos</h2>
       <div id="dash-top-atraso"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Lembretes de cobrança</h2>
+      <div class="dash-topo">
+        <div class="empty" style="padding:0;">Pessoas com prestações em atraso ou a vencer em breve. O botão abre o WhatsApp com a mensagem já escrita; só tem de a enviar.</div>
+        <div class="dash-filtros">
+          <label for="dash-lemb-tipo" style="margin:0;">Mostrar</label>
+          <select id="dash-lemb-tipo" onchange="renderDashboard()">
+            <option value="todos">Atrasos e a vencer</option>
+            <option value="atraso">Só atrasos</option>
+            <option value="vencer">Só a vencer</option>
+          </select>
+          <label for="dash-lemb-dias" style="margin:0;">A vencer em</label>
+          <select id="dash-lemb-dias" onchange="renderDashboard()">
+            <option value="3">3 dias</option>
+            <option value="7" selected>7 dias</option>
+            <option value="15">15 dias</option>
+            <option value="30">30 dias</option>
+          </select>
+        </div>
+      </div>
+      <div id="dash-lembretes" style="margin-top:10px;"></div>
     </section>
 
     <section class="panel">
@@ -1035,6 +1125,43 @@
     <div class="modal-actions">
       <button class="ghost" id="modal-cancel">Cancelar</button>
       <button id="modal-ok">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-senha" role="dialog" aria-modal="true">
+  <div class="modal-card" style="max-width:420px;">
+    <h3>Escolha a sua palavra-passe</h3>
+    <p>Esta é a primeira vez que entra. Por segurança, escolha agora uma palavra-passe só sua (mínimo 10 caracteres). Só depois pode usar o programa.</p>
+    <label for="ms-pass1">Nova palavra-passe</label>
+    <input id="ms-pass1" type="password" autocomplete="new-password">
+    <label for="ms-pass2">Repita a nova palavra-passe</label>
+    <input id="ms-pass2" type="password" autocomplete="new-password">
+    <div id="ms-msg" style="color:var(--danger);font-size:13px;min-height:20px;margin-top:6px;"></div>
+    <div class="modal-actions">
+      <button class="ghost" id="ms-sair">Sair</button>
+      <button id="ms-ok">Guardar e entrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-import" role="dialog" aria-modal="true">
+  <div class="modal-card modal-largo">
+    <h3>Pré-visualização da importação</h3>
+    <p id="mi-resumo"></p>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 8px;font-size:13px;">
+      <label style="display:flex;align-items:center;gap:6px;margin:0;"><input type="checkbox" id="mi-so-problemas" style="width:auto;"> Mostrar só avisos, erros e ignoradas</label>
+      <label id="mi-saltar-wrap" style="display:none;align-items:center;gap:6px;margin:0;"><input type="checkbox" id="mi-saltar-dup" style="width:auto;" checked> Saltar as linhas com possível duplicado</label>
+    </div>
+    <div class="mi-tabela">
+      <table>
+        <thead><tr><th>Linha</th><th>NIF</th><th>Pessoa</th><th>Data</th><th class="num">Valor</th><th>O que vai acontecer</th><th>Estado</th></tr></thead>
+        <tbody id="mi-corpo"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" id="mi-cancel">Cancelar</button>
+      <button id="mi-ok">Aplicar</button>
     </div>
   </div>
 </div>
@@ -1123,6 +1250,8 @@ document.addEventListener('keydown', e => {
 })();
 
 /* ---------- notificações (toasts) ---------- */
+// escapa texto vindo da base de dados antes de o pôr em HTML (evita que um nome com < > & ' " estrague a página ou execute código)
+function escH(t){ return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function toast(msg, tipo){
   const box = document.getElementById('toasts');
   if (!box) return;
@@ -1131,8 +1260,13 @@ function toast(msg, tipo){
   t.innerHTML = '<span class="t-msg"></span>';
   t.querySelector('.t-msg').textContent = msg;
   box.appendChild(t);
-  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, tipo === 'err' ? 5500 : 3200);
+  const fechar = () => { t.classList.add('out'); setTimeout(() => t.remove(), 300); };
+  if (tipo === 'err'){ t.title = 'Toque para fechar'; t.style.cursor = 'pointer'; t.onclick = fechar; }
+  setTimeout(fechar, tipo === 'err' ? 30000 : 3200);
 }
+// erros inesperados deixam de ser silenciosos: aparecem numa mensagem para se poder ver o que falhou
+window.addEventListener('error', ev => { if (ev && ev.message && !/ResizeObserver/.test(ev.message)) toast('Erro inesperado: ' + ev.message, 'err'); });
+window.addEventListener('unhandledrejection', ev => { const r = ev.reason; toast('Erro inesperado: ' + ((r && r.message) || r), 'err'); });
 
 /* ---------- confirmação (modal) ---------- */
 function confirmar(titulo, texto, okLabel, perigo){
@@ -1230,7 +1364,7 @@ function mudarVista(nome){
   if (nome === 'lista') carregarTodosEmprestimos();
   if (nome === 'banco') carregarBanco();
   if (nome === 'cheques') carregarCheques();
-  if (nome === 'utilizadores') carregarUtilizadores();
+  if (nome === 'utilizadores'){ carregarUtilizadores(); mostrarUltimaCopia(); }
   if (nome === 'resumo') carregarResumoMensal();
 }
 
@@ -1410,6 +1544,34 @@ async function entrar(){
   await entrarComSessao(data.user);
 }
 
+// palavra-passe temporária aleatória (sem letras/números que se confundem: 0 O 1 l I)
+function gerarPasswordInicial(){
+  const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const bytes = new Uint32Array(12); crypto.getRandomValues(bytes);
+  let p = ''; bytes.forEach(b => { p += letras[b % letras.length]; });
+  document.getElementById('nu-pass').value = p;
+}
+
+// no primeiro acesso a pessoa tem de escolher uma palavra-passe nova (a conta é criada com o aviso must_change_password)
+function pedirNovaPalavraPasse(){
+  return new Promise(resolve => {
+    const modal = document.getElementById('modal-senha');
+    const p1 = document.getElementById('ms-pass1'), p2 = document.getElementById('ms-pass2'), msg = document.getElementById('ms-msg');
+    p1.value = ''; p2.value = ''; msg.textContent = '';
+    modal.classList.add('open'); setTimeout(() => p1.focus(), 50);
+    const fechar = v => { modal.classList.remove('open'); document.getElementById('ms-ok').onclick = null; document.getElementById('ms-sair').onclick = null; resolve(v); };
+    document.getElementById('ms-ok').onclick = async () => {
+      if (p1.value.length < 10){ msg.textContent = 'A palavra-passe deve ter pelo menos 10 caracteres.'; return; }
+      if (p1.value !== p2.value){ msg.textContent = 'As duas palavras-passe não coincidem.'; return; }
+      const { error } = await sb.auth.updateUser({ password: p1.value, data: { must_change_password: false } });
+      if (error){ msg.textContent = 'Não foi possível guardar: ' + error.message; return; }
+      log('Palavra-passe definida.');
+      fechar(true);
+    };
+    document.getElementById('ms-sair').onclick = () => fechar(false);
+  });
+}
+
 async function entrarComSessao(user){
   // garante que existe um perfil para este utilizador (papel 'consulta' por omissão)
   let { data: perfil, error } = await sb.from('perfis').select('*').eq('user_id', user.id).maybeSingle();
@@ -1418,6 +1580,10 @@ async function entrarComSessao(user){
     perfil = ins.data;
   }
   meuPapel = perfil ? perfil.papel : 'consulta';
+
+  if (user && user.user_metadata && user.user_metadata.must_change_password){
+    if (!await pedirNovaPalavraPasse()){ await sair(); return; }          // sem palavra-passe nova não entra
+  }
 
   document.getElementById('login-panel').style.display = 'none';
   document.getElementById('app-content').style.display = 'block';
@@ -1428,10 +1594,35 @@ async function entrarComSessao(user){
   document.getElementById('conta-email').textContent = nomeVisivel(user.email);
 
   aplicarPermissoes();
+  iniciarInatividade();
   mudarVista('lista');   // o programa abre na lista de empréstimos
 }
 
+/* ---------- segurança: a sessão termina sozinha se ninguém mexer no programa ---------- */
+const MINUTOS_INATIVIDADE = 20;
+let tInativo = null, tAviso = null, ultimoMov = 0, ocupado = 0, ouvintesInatividade = false;
+function reiniciarInatividade(){
+  clearTimeout(tInativo); clearTimeout(tAviso);
+  if (!meuPapel) return;
+  tAviso = setTimeout(() => { if (!ocupado) toast('Por segurança, a sessão termina dentro de 1 minuto se não houver atividade. Toque no ecrã para continuar.', 'err'); }, (MINUTOS_INATIVIDADE - 1) * 60000);
+  tInativo = setTimeout(async () => {
+    if (ocupado){ reiniciarInatividade(); return; }            // não corta uma importação ou outra tarefa em curso
+    await sair();
+    toast('Sessão terminada por inatividade. Entre de novo.', 'err');
+  }, MINUTOS_INATIVIDADE * 60000);
+}
+function iniciarInatividade(){
+  if (!ouvintesInatividade){
+    ouvintesInatividade = true;
+    ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach(ev => window.addEventListener(ev, () => {
+      const n = Date.now(); if (n - ultimoMov > 5000){ ultimoMov = n; reiniciarInatividade(); }
+    }, { passive: true }));
+  }
+  reiniciarInatividade();
+}
+
 async function sair(){
+  clearTimeout(tInativo); clearTimeout(tAviso);
   await sb.auth.signOut();
   meuPapel = null;
   document.getElementById('user-bar').style.display = 'none';
@@ -1457,7 +1648,7 @@ async function carregarUtilizadores(){
     const tr = document.createElement('tr');
     const outroPapel = p.papel === 'gestao' ? 'consulta' : 'gestao';
     const rotulo = outroPapel === 'gestao' ? 'Tornar gestão' : 'Tornar consulta';
-    tr.innerHTML = `<td>${nomeVisivel(p.email) || p.user_id}</td><td><span class="badge ${p.papel === 'gestao' ? 'ativo' : 'pendente'}">${p.papel}</span></td><td><button class="small ghost" onclick="mudarPapel('${p.user_id}','${outroPapel}')">${rotulo}</button></td>`;
+    tr.innerHTML = `<td>${escH(nomeVisivel(p.email) || p.user_id)}</td><td><span class="badge ${p.papel === 'gestao' ? 'ativo' : 'pendente'}">${p.papel}</span></td><td><button class="small ghost" onclick="mudarPapel('${p.user_id}','${outroPapel}')">${rotulo}</button></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -1479,7 +1670,7 @@ async function criarUtilizador(){
   const papel = document.getElementById('nu-papel').value;
   if (!email || !password){ log('Indica o nome (ou email) e a palavra-passe.', true); return; }
   if (!nomeTxt.includes('@') && email.split('@')[0].length < 2){ log('O nome de utilizador deve ter pelo menos 2 letras ou números.', true); return; }
-  if (password.length < 6){ log('A palavra-passe deve ter pelo menos 6 caracteres.', true); return; }
+  if (password.length < 10){ log('A palavra-passe deve ter pelo menos 10 caracteres.', true); return; }
 
   const { data, error } = await sb.functions.invoke('admin-create-user', {
     body: { email, password, papel }
@@ -1495,7 +1686,7 @@ async function criarUtilizador(){
   }
   if (data && data.error){ log('Erro ao criar utilizador: ' + data.error, true); return; }
 
-  log('Utilizador criado com sucesso. Para entrar, escreve ' + (nomeTxt.includes('@') ? 'o email' : 'o nome «' + nomeVisivel(email) + '»') + ' e a palavra-passe.');
+  log('Utilizador criado. Para entrar, a pessoa escreve ' + (nomeTxt.includes('@') ? 'o email' : 'o nome «' + nomeVisivel(email) + '»') + ' e a palavra-passe temporária, e escolhe logo uma nova.');
   document.getElementById('nu-email').value = '';
   document.getElementById('nu-pass').value = '';
   document.getElementById('nu-papel').value = 'consulta';
@@ -1506,10 +1697,10 @@ async function alterarPassword(){
   if (!requireConn()) return;
   const p1 = document.getElementById('np-pass1').value;
   const p2 = document.getElementById('np-pass2').value;
-  if (!p1 || p1.length < 6){ log('A nova palavra-passe deve ter pelo menos 6 caracteres.', true); return; }
+  if (!p1 || p1.length < 10){ log('A nova palavra-passe deve ter pelo menos 10 caracteres.', true); return; }
   if (p1 !== p2){ log('As duas palavras-passe não coincidem.', true); return; }
 
-  const { error } = await sb.auth.updateUser({ password: p1 });
+  const { error } = await sb.auth.updateUser({ password: p1, data: { must_change_password: false } });
   if (error){ log('Erro ao alterar palavra-passe: ' + error.message, true); return; }
 
   log('Palavra-passe alterada com sucesso.');
@@ -1651,6 +1842,334 @@ function badgeClasseEmprestimo(estado){
   return badgeClassePrestacao(estado);
 }
 
+/* ---------- dashboard em PDF ---------- */
+function hexRgb(h){ const n = parseInt(h.replace('#', ''), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function desenharGraficoPdf(doc, x, y, w, h, rotulos, series, linhas){
+  const ml = 46, mb = 20, mt = 6, n = rotulos.length;
+  const gx = x + ml, gy = y + mt, gw = w - ml, gh = h - mt - mb;
+  const max = dashMaxBonito(Math.max(0, ...[].concat(...series.map(s => s.valores), ...linhas.map(l => l.valores))));
+  const yy = v => gy + gh - (v / max) * gh;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setLineWidth(0.4);
+  for (let i = 0; i <= 5; i++){
+    const v = max * i / 5, py = yy(v);
+    doc.setDrawColor(225, 228, 233); doc.line(gx, py, gx + gw, py);
+    doc.setTextColor(110, 116, 128); doc.text(dashCurto(v), gx - 5, py + 2.6, { align: 'right' });
+  }
+  const g = gw / n, bw = Math.max(2, Math.min(18, g * 0.7 / series.length)), passo = n > 18 ? 2 : 1;
+  rotulos.forEach((r, i) => {
+    const cx = gx + g * i + g / 2;
+    series.forEach((sr, k) => {
+      const v = sr.valores[i];
+      if (v > 0){ const bh = (v / max) * gh; doc.setFillColor(...hexRgb(sr.cor)); doc.rect(cx - (bw * series.length) / 2 + bw * k, gy + gh - bh, bw, bh, 'F'); }
+    });
+    if (i % passo === 0){ doc.setTextColor(110, 116, 128); doc.text(r, cx, gy + gh + 11, { align: 'center' }); }
+  });
+  linhas.forEach(l => {
+    const pts = l.valores.map((v, i) => [gx + g * i + g / 2, yy(v)]);
+    doc.setDrawColor(...hexRgb(l.cor)); doc.setFillColor(...hexRgb(l.cor)); doc.setLineWidth(l.tracejado ? 1.1 : 1.5);
+    if (l.tracejado) doc.setLineDashPattern([4, 3], 0);
+    for (let i = 1; i < pts.length; i++) doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]);
+    if (l.tracejado) doc.setLineDashPattern([], 0);
+    else pts.forEach(p => doc.circle(p[0], p[1], 2.2, 'F'));
+  });
+}
+function exportarDashboardPdf(){
+  if (!dashUltimo){ log('Abra primeiro o dashboard.', true); return; }
+  const jsPDF = window.jspdf && window.jspdf.jsPDF;
+  const doc = jsPDF ? new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' }) : null;
+  if (!doc || typeof doc.autoTable !== 'function'){ log('A biblioteca de PDF não carregou (verifique a internet).', true); return; }
+  const D = dashUltimo, sp = t => String(t).replace(/[\u00a0\u202f]/g, ' ');
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 40;
+  const emissor = (cfg && cfg.titular) ? cfg.titular : 'Livro de Empréstimos';
+  cabecalhoPdf(doc, W, M, 'DASHBOARD', 18, emissor, '', 'Emitido em ' + hoje());
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(80, 86, 98); doc.text('Período: ' + D.periodoTxt, M, 96);
+
+  // indicadores (2 linhas de 4), sem caixas
+  const cw = (W - 2 * M) / 4;
+  D.kpis.forEach((k, i) => {
+    const x = M + (i % 4) * cw, y = 122 + Math.floor(i / 4) * 54;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(110, 116, 128); doc.text(k.rot.toUpperCase(), x, y);
+    const c = k.cls === 'neg' ? [225, 29, 72] : k.cls === 'ok' ? [5, 150, 105] : k.cls === 'warn' ? [180, 83, 9] : [38, 91, 136];
+    doc.setFontSize(15); doc.setTextColor(...c); doc.text(sp(k.valor), x, y + 18);
+    const cs = k.subCls === 'neg' ? [225, 29, 72] : k.subCls === 'ok' ? [5, 150, 105] : [110, 116, 128];
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...cs); doc.text(sp(k.sub), x, y + 30, { maxWidth: cw - 12 });
+  });
+
+  // gráfico
+  const yG = 122 + 2 * 54 + 8;
+  if (D.temDados){
+    let lx = M;
+    const leg = D.series.map(s => [s.nome, s.cor]).concat(D.linhas.map(l => [l.nome + (l.tracejado ? ' (tracejado)' : ''), l.cor]));
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    leg.forEach(([nome, cor]) => { doc.setFillColor(...hexRgb(cor)); doc.rect(lx, yG - 7, 8, 8, 'F'); doc.setTextColor(80, 86, 98); doc.text(nome, lx + 12, yG); lx += 12 + doc.getTextWidth(nome) + 18; });
+    desenharGraficoPdf(doc, M, yG + 8, W - 2 * M, H - (yG + 8) - 40, D.rotulos, D.series, D.linhas);
+  }
+
+  // página 2: detalhe mensal e tabelas de pessoas
+  doc.addPage();
+  const estilo = { styles: { fontSize: 8, cellPadding: 3, textColor: 30 }, headStyles: { fillColor: [38, 91, 136], textColor: 255, fontStyle: 'bold' }, footStyles: { fillColor: [228, 237, 245], textColor: 30, fontStyle: 'bold' }, alternateRowStyles: { fillColor: [247, 248, 250] }, margin: { left: M, right: M } };
+  const titulo = (t, y) => { doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(38, 91, 136); doc.text(t, M, y); };
+  titulo('Detalhe mensal', 52);
+  doc.autoTable({ ...estilo, head: [D.detalhe.cab], body: D.detalhe.corpo.map(r => r.map(sp)), foot: [D.detalhe.rodape.map(sp)], startY: 60, theme: 'striped',
+    didParseCell: h => { if (h.column.index >= 1) h.cell.styles.halign = 'right'; } });
+  const blocos = [['Maiores atrasos', D.atrasos], ['Maiores saldos em dívida', D.saldos]];
+  blocos.forEach(([t, bl]) => {
+    if (!bl.corpo.length) return;
+    let y = doc.lastAutoTable.finalY + 26;
+    if (y > H - 110){ doc.addPage(); y = 52; }
+    titulo(t, y);
+    doc.autoTable({ ...estilo, head: [bl.cab], body: bl.corpo.map(r => r.map(sp)), startY: y + 8, theme: 'striped',
+      didParseCell: h => { if (h.column.index >= 1) h.cell.styles.halign = 'right'; } });
+  });
+
+  const total = doc.internal.getNumberOfPages(), quem = document.getElementById('user-email') ? document.getElementById('user-email').textContent : '';
+  for (let i = 1; i <= total; i++){
+    doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120);
+    doc.text('Página ' + i + ' de ' + total, W - M, H - 20, { align: 'right' });
+    doc.text('Dashboard gerado em ' + hoje() + (quem ? '  ·  ' + quem : ''), M, H - 20);
+  }
+  doc.save('dashboard_' + hoje() + '.pdf');
+  log('Dashboard exportado em PDF.');
+}
+
+/* ---------- lembretes por WhatsApp ---------- */
+const NOME_ENTIDADE = 'Fundação Social das Forças Armadas';
+const PREFIXO_PAIS = '238';                                   // Cabo Verde: números com 7 dígitos recebem o prefixo
+function telefoneWhatsApp(contacto){
+  let d = String(contacto || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.length === 7) d = PREFIXO_PAIS + d;
+  return d.length >= 9 ? d : null;
+}
+function dataPt(iso){ return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
+function dias(de, ate){ return Math.round((new Date(ate) - new Date(de)) / 86400000); }
+function textoValor(v){ return String(fmt(v)).replace(/[\u00a0\u202f]/g, ' ') + ' ' + ((cfg && cfg.moedaPlur) || 'escudos'); }
+
+// Situação de cobrança de uma pessoa, a partir dos seus empréstimos e prestações.
+// atraso: { n, valor, maisAntiga, dias } ou null | futuras: [{ data, valor, dias }] por data (só prestações ainda não vencidas)
+function situacaoCobranca(emps, porEmp){
+  const hojeS = hoje();
+  let atraso = null; const porData = new Map();
+  emps.forEach(emp => {
+    const linhas = porEmp.get(emp.id) || [];
+    if (['ANULADO', 'LIQUIDADO', 'PAGO'].includes(estadoFinalEmprestimo(emp, linhas))) return;
+    linhas.forEach(l => {
+      const falta = faltaPrestacao(l);
+      if (falta <= 0) return;
+      if (estadoPrestacao(l) === 'ATRASADO'){
+        if (!atraso) atraso = { n: 0, valor: 0, maisAntiga: l.data_vencimento, dias: 0 };
+        atraso.n++; atraso.valor += falta;
+        if (l.data_vencimento < atraso.maisAntiga) atraso.maisAntiga = l.data_vencimento;
+      } else porData.set(l.data_vencimento, (porData.get(l.data_vencimento) || 0) + falta);
+    });
+  });
+  if (atraso){ atraso.valor = arred(atraso.valor); atraso.dias = dias(atraso.maisAntiga, hojeS); }
+  const futuras = [...porData.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([data, valor]) => ({ data, valor: arred(valor), dias: dias(hojeS, data) }));
+  return { atraso, futuras };
+}
+function saudacao(){ const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 19 ? 'Boa tarde' : 'Boa noite'; }
+function mensagemLembrete(nome, sit){
+  if (sit.atraso){
+    const a = sit.atraso;
+    return saudacao() + ', ' + nome + '. A ' + NOME_ENTIDADE + ' informa que tem ' + a.n + (a.n === 1 ? ' prestação' : ' prestações') +
+      ' do seu empréstimo em atraso, no valor total de ' + textoValor(a.valor) + ' (a mais antiga venceu em ' + dataPt(a.maisAntiga) + ', há ' + a.dias + (a.dias === 1 ? ' dia' : ' dias') +
+      '). Pedimos que regularize o pagamento logo que possível. Obrigado.';
+  }
+  const f = sit.futuras[0];
+  if (!f) return null;
+  const quando = f.dias <= 0 ? 'hoje (' + dataPt(f.data) + ')' : f.dias === 1 ? 'amanhã (' + dataPt(f.data) + ')' : 'em ' + f.dias + ' dias, a ' + dataPt(f.data);
+  return saudacao() + ', ' + nome + '. A ' + NOME_ENTIDADE + ' lembra que a prestação do seu empréstimo, no valor de ' + textoValor(f.valor) + ', vence ' + quando + '. Obrigado.';
+}
+function abrirWhatsApp(contacto, texto){
+  const tel = telefoneWhatsApp(contacto);
+  if (!tel){ log('Este contacto não parece ser um número de telefone válido.', true); return false; }
+  window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(texto), '_blank', 'noopener');
+  return true;
+}
+async function lembreteWhatsAppPessoa(){
+  if (!requireConn() || !pessoaAtual) return;
+  if (!pessoaAtual.contacto){ log('Esta pessoa não tem contacto registado. Use "Editar" para acrescentar o número.', true); return; }
+  const re = await sb.from('emprestimos').select('*').eq('nif', pessoaAtual.nif);
+  if (re.error){ log('Erro: ' + re.error.message, true); return; }
+  const emps = re.data || [];
+  let linhas = [];
+  try { linhas = emps.length ? await buscarPorLotes('mapa_amortizacao', 'emprestimo_id', emps.map(e => e.id), '*') : []; }
+  catch (e){ log('Erro: ' + e.message, true); return; }
+  const porEmp = new Map();
+  linhas.forEach(l => { if (!porEmp.has(l.emprestimo_id)) porEmp.set(l.emprestimo_id, []); porEmp.get(l.emprestimo_id).push(l); });
+  const texto = mensagemLembrete(pessoaAtual.nome, situacaoCobranca(emps, porEmp));
+  if (!texto){ log('Esta pessoa não tem prestações por pagar.', true); return; }
+  abrirWhatsApp(pessoaAtual.contacto, texto);
+}
+// painel do dashboard: quem está em atraso ou tem prestações a vencer em breve
+function renderLembretes(emps, porEmp){
+  const caixa = document.getElementById('dash-lembretes');
+  const tipo = document.getElementById('dash-lemb-tipo').value;
+  const janela = Number(document.getElementById('dash-lemb-dias').value);
+  const porNif = new Map();
+  emps.forEach(e => { if (!porNif.has(e.nif)) porNif.set(e.nif, { nif: e.nif, nome: (e.pessoas && e.pessoas.nome) || e.nif, contacto: (e.pessoas && e.pessoas.contacto) || '', emps: [] }); porNif.get(e.nif).emps.push(e); });
+  const itens = [];
+  porNif.forEach(p => {
+    const sit = situacaoCobranca(p.emps, porEmp);
+    const futura = sit.futuras.find(f => f.dias <= janela);
+    if (sit.atraso && tipo !== 'vencer') itens.push({ p, sit, ordem: 0, dias: sit.atraso.dias, situacao: 'Em atraso há ' + sit.atraso.dias + ' dia' + (sit.atraso.dias === 1 ? '' : 's') + ' (' + sit.atraso.n + ' prest.)', valor: sit.atraso.valor, cor: 'var(--danger)' });
+    else if (!sit.atraso && futura && tipo !== 'atraso') itens.push({ p, sit, ordem: 1, dias: futura.dias, situacao: futura.dias <= 0 ? 'Vence hoje' : 'Vence em ' + futura.dias + ' dia' + (futura.dias === 1 ? '' : 's') + ' (' + dataPt(futura.data) + ')', valor: futura.valor, cor: 'var(--warn)' });
+  });
+  itens.sort((a, b) => a.ordem - b.ordem || (a.ordem === 0 ? b.dias - a.dias : a.dias - b.dias));
+  if (!itens.length){ caixa.innerHTML = '<div class="empty">Não há lembretes para mostrar com estes filtros.</div>'; return; }
+  caixa.innerHTML = '<table><thead><tr><th>Pessoa</th><th>Situação</th><th class="num">Valor</th><th>Contacto</th><th></th></tr></thead><tbody></tbody></table>';
+  const tb = caixa.querySelector('tbody');
+  itens.forEach(it => {
+    const tr = document.createElement('tr');
+    const tel = telefoneWhatsApp(it.p.contacto);
+    tr.innerHTML = '<td></td><td style="font-weight:700;"></td><td class="num"></td><td></td><td style="text-align:right;"></td>';
+    tr.children[0].textContent = it.p.nome; tr.children[1].textContent = it.situacao; tr.children[1].style.color = it.cor;
+    tr.children[2].textContent = fmt(it.valor); tr.children[3].textContent = it.p.contacto || '—';
+    if (tel){
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'small ghost'; b.textContent = 'WhatsApp';
+      b.onclick = () => abrirWhatsApp(it.p.contacto, mensagemLembrete(it.p.nome, it.sit));
+      tr.children[4].appendChild(b);
+    } else { tr.children[4].textContent = it.p.contacto ? 'Número inválido' : 'Sem contacto'; tr.children[4].style.color = 'var(--muted)'; }
+    tb.appendChild(tr);
+  });
+}
+
+/* ---------- documentos do empréstimo (links do Google Drive) ---------- */
+const SQL_DOCUMENTOS = `-- Documentos de cada empréstimo (só o link; os ficheiros ficam no Google Drive)
+-- Se o id dos empréstimos for do tipo uuid, troque "bigint" por "uuid" na linha de emprestimo_id.
+create table if not exists documentos (
+  id bigint generated by default as identity primary key,
+  emprestimo_id bigint not null references emprestimos(id) on delete cascade,
+  tipo text not null check (tipo in ('Cópia de cheque', 'Pedido de empréstimo', 'Outros')),
+  descricao text,
+  url text not null,
+  criado_em timestamptz not null default now(),
+  criado_por text
+);
+alter table documentos enable row level security;
+create policy "documentos_ler" on documentos for select to authenticated using (true);
+create policy "documentos_gerir" on documentos for all to authenticated
+  using (exists (select 1 from perfis p where p.user_id = auth.uid() and p.papel = 'gestao'))
+  with check (exists (select 1 from perfis p where p.user_id = auth.uid() and p.papel = 'gestao'));`;
+
+function tabelaEmFalta(e){
+  return !!e && (['42P01', 'PGRST205'].includes(e.code) || /does not exist|schema cache|Could not find the table/i.test(e.message || ''));
+}
+function copiarSqlDocumentos(){
+  const t = document.getElementById('docs-sql-texto');
+  t.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(SQL_DOCUMENTOS) : Promise.reject()).then(() => log('SQL copiado.'), () => { try { document.execCommand('copy'); log('SQL copiado.'); } catch (e) {} });
+}
+async function carregarDocumentos(){
+  if (!emprestimoAtual || !sb) return;
+  const lista = document.getElementById('docs-lista');
+  const r = await sb.from('documentos').select('*').eq('emprestimo_id', emprestimoAtual.id).order('id');
+  const box = document.getElementById('docs-sql');
+  if (r.error){
+    lista.innerHTML = '';
+    if (tabelaEmFalta(r.error)){
+      document.getElementById('docs-sql-texto').value = SQL_DOCUMENTOS;
+      box.style.display = 'block'; document.getElementById('docs-novo').style.display = 'none';
+    } else log('Erro nos documentos: ' + r.error.message, true);
+    return;
+  }
+  box.style.display = 'none'; document.getElementById('docs-novo').style.display = '';
+  const docs = r.data || [];
+  document.getElementById('docs-sub').textContent = docs.length ? '— ' + docs.length + ' ligado(s)' : '';
+  lista.innerHTML = '';
+  if (!docs.length){ lista.innerHTML = '<div class="empty">Ainda não há documentos.</div>'; return; }
+  const tab = document.createElement('table');
+  tab.innerHTML = '<thead><tr><th>Tipo</th><th>Descrição</th><th>Adicionado</th><th></th></tr></thead>';
+  const tb = document.createElement('tbody');
+  docs.forEach(d => {
+    const tr = document.createElement('tr');
+    const c1 = document.createElement('td'); c1.textContent = d.tipo;
+    const c2 = document.createElement('td'); c2.style.whiteSpace = 'normal'; c2.textContent = d.descricao || '';
+    const c3 = document.createElement('td'); c3.textContent = (d.criado_em || '').slice(0, 10);
+    const c4 = document.createElement('td'); c4.style.textAlign = 'right'; c4.style.whiteSpace = 'nowrap';
+    const a = document.createElement('a'); a.href = d.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = 'Abrir'; a.className = 'btn-link';
+    a.style.marginRight = '10px';
+    c4.appendChild(a);
+    const rm = document.createElement('button'); rm.type = 'button'; rm.className = 'small ghost gestao-only'; rm.textContent = 'Remover';
+    rm.onclick = () => removerDocumento(d);
+    c4.appendChild(rm);
+    tr.append(c1, c2, c3, c4); tb.appendChild(tr);
+  });
+  tab.appendChild(tb); lista.appendChild(tab);
+}
+async function adicionarDocumento(){
+  if (!requireGestao() || !emprestimoAtual) return;
+  const tipo = document.getElementById('doc-tipo').value;
+  const descricao = document.getElementById('doc-desc').value.trim();
+  const url = document.getElementById('doc-url').value.trim();
+  let u; try { u = new URL(url); } catch (e) { u = null; }
+  if (!u || u.protocol !== 'https:'){ log('Cole o link completo do Google Drive (começa por https://).', true); return; }
+  const email = (document.getElementById('user-email') || {}).textContent || '';
+  const { error } = await sb.from('documentos').insert({ emprestimo_id: emprestimoAtual.id, tipo, descricao: descricao || null, url, criado_por: email || null });
+  if (error){ if (tabelaEmFalta(error)) carregarDocumentos(); else log('Erro: ' + error.message, true); return; }
+  document.getElementById('doc-desc').value = ''; document.getElementById('doc-url').value = '';
+  log(/(^|\.)google\.com$/.test(u.hostname) ? 'Documento adicionado.' : 'Documento adicionado (o link não parece ser do Google Drive).');
+  carregarDocumentos();
+}
+async function removerDocumento(d){
+  if (!requireGestao()) return;
+  if (!await confirmar('Remover documento?', 'O link "' + d.tipo + (d.descricao ? ' — ' + d.descricao : '') + '" deixa de aparecer neste empréstimo. O ficheiro no Google Drive não é apagado.', 'Remover', true)) return;
+  const { error } = await sb.from('documentos').delete().eq('id', d.id);
+  if (error){ log('Erro: ' + error.message, true); return; }
+  log('Documento removido.');
+  carregarDocumentos();
+}
+
+/* ---------- cópia de segurança ---------- */
+async function buscarTudo(tabela, ordem){
+  for (const usarOrdem of [true, false]){
+    const todas = [];
+    for (let de = 0; ; de += 1000){
+      let q = sb.from(tabela).select('*');
+      if (usarOrdem) q = q.order(ordem);
+      const { data, error } = await q.range(de, de + 999);
+      if (error){ if (usarOrdem) { todas.length = 0; break; } return { error }; }
+      todas.push(...data);
+      if (data.length < 1000) return { data: todas };
+    }
+  }
+  return { data: [] };
+}
+function mostrarUltimaCopia(){
+  const el = document.getElementById('backup-ultima');
+  if (!el) return;
+  let d = null; try { d = localStorage.getItem('ultimaCopiaSeguranca'); } catch (e) {}
+  if (!d){ el.textContent = 'Ainda não foi feita nenhuma cópia neste aparelho.'; el.style.color = 'var(--warn)'; return; }
+  const dias = Math.floor((new Date(hoje()) - new Date(d)) / 86400000);
+  el.textContent = 'Última cópia neste aparelho: ' + d + (dias > 0 ? ' (há ' + dias + ' dia' + (dias > 1 ? 's' : '') + ')' : ' (hoje)') + (dias > 30 ? ' — já passou muito tempo, faça uma nova.' : '');
+  el.style.color = dias > 30 ? 'var(--warn)' : 'var(--muted)';
+}
+async function exportarTudo(){
+  if (!requireGestao()) return;
+  if (typeof XLSX === 'undefined'){ log('A biblioteca de Excel não carregou (verifique a internet).', true); return; }
+  const est = document.getElementById('backup-estado');
+  const tabelas = [['Pessoas', 'pessoas', 'nif'], ['Empréstimos', 'emprestimos', 'id'], ['Mapa de amortização', 'mapa_amortizacao', 'id'],
+                   ['Banco', 'movimentos_banco', 'id'], ['Cheques', 'cheques', 'id'], ['Documentos', 'documentos', 'id']];
+  const wb = XLSX.utils.book_new(), resumo = [];
+  for (const [nome, tab, ord] of tabelas){
+    est.textContent = 'A ler ' + nome + '...';
+    const r = await buscarTudo(tab, ord);
+    if (r.error){
+      if (tab === 'documentos'){ resumo.push([nome, '(tabela ainda não criada)']); continue; }   // opcional
+      est.textContent = ''; log('Erro ao ler "' + nome + '": ' + r.error.message, true); return;
+    }
+    XLSX.utils.book_append_sheet(wb, r.data.length ? XLSX.utils.json_to_sheet(r.data) : XLSX.utils.aoa_to_sheet([['(sem dados)']]), nome.slice(0, 31));
+    resumo.push([nome, r.data.length]);
+  }
+  const wsResumo = XLSX.utils.aoa_to_sheet([['Cópia de segurança — Livro de Empréstimos'], ['Data', hoje()], [], ['Tabela', 'Linhas'], ...resumo]);
+  XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+  XLSX.writeFile(wb, 'copia_seguranca_' + hoje() + '.xlsx');
+  try { localStorage.setItem('ultimaCopiaSeguranca', hoje()); } catch (e) {}
+  est.textContent = 'Cópia criada: ' + resumo.map(x => x[0] + ' (' + x[1] + ')').join(' · ');
+  mostrarUltimaCopia();
+  log('Cópia de segurança descarregada.');
+}
+
 async function buscarTodasPrestacoes(){
   const todas = [];
   for (let de = 0; ; de += 1000){
@@ -1731,7 +2250,7 @@ function aplicarFiltrosLista(){
       mudarVista('emprestimos');
       procurarPessoa().then(() => verMapa(emp));
     };
-    tr.innerHTML = `<td>${emp.nif}</td><td>${nome}</td><td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td class="num">${fmt(pago)}</td><td class="num">${fmt(saldo)}</td><td><span class="badge ${badgeClasseEmprestimo(estado)}">${estado}</span></td>`;
+    tr.innerHTML = `<td>${escH(emp.nif)}</td><td>${escH(nome)}</td><td>${emp.data_inicio}</td><td class="num">${fmt(emp.valor_emprestimo)}</td><td class="num">${emp.taxa_juro_anual}%</td><td class="num">${emp.numero_prestacoes}</td><td class="num">${fmt(pago)}</td><td class="num">${fmt(saldo)}</td><td><span class="badge ${badgeClasseEmprestimo(estado)}">${estado}</span></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -2168,11 +2687,11 @@ function simular(){
 /* ---------- DASHBOARD ---------- */
 const MESES_ABR = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 const COR_DASH = { azul:'#265b88', azulClaro:'#9fb9d2', amarelo:'#f2a900', ok:'#059669', perigo:'#E11D48', cinza:'#94a3b8' };
-let dashCache = null;
+let dashCache = null, dashUltimo = null;
 
 async function carregarResumoMensal(){
   if (!requireConn()) return;
-  const { data: emps, error } = await sb.from('emprestimos').select('*, pessoas(nome)');
+  const { data: emps, error } = await sb.from('emprestimos').select('*, pessoas(nome, contacto)');
   if (error){ log('Erro: ' + error.message, true); return; }
   const { data: prest, error: e2 } = await buscarTodasPrestacoes();
   if (e2){ log('Erro: ' + e2.message, true); return; }
@@ -2206,7 +2725,8 @@ function dashLegenda(itens){
 function dashSvgBarras(rotulos, series, linha, W, H){
   W = W || 900; H = H || 290;
   const ml = 56, mr = 14, mt = 12, mb = 30, n = rotulos.length;
-  const todos = [].concat(...series.map(x => x.valores), linha ? linha.valores : []);
+  const linhas = Array.isArray(linha) ? linha : (linha ? [linha] : []);
+  const todos = [].concat(...series.map(x => x.valores), ...linhas.map(l => l.valores));
   const max = dashMaxBonito(Math.max(0, ...todos));
   const iw = W - ml - mr, ih = H - mt - mb, gw = iw / n;
   const bw = Math.max(3, Math.min(26, gw * 0.7 / series.length));
@@ -2225,11 +2745,11 @@ function dashSvgBarras(rotulos, series, linha, W, H){
     });
     if (i % passo === 0) o += '<text x="' + cx.toFixed(1) + '" y="' + (H - 10) + '" text-anchor="middle">' + dashEsc(r.l) + '</text>';
   });
-  if (linha){
-    const pts = linha.valores.map((v, i) => [ml + gw * i + gw / 2, y(v)]);
-    o += '<polyline fill="none" stroke="' + linha.cor + '" stroke-width="2.2" points="' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '"/>';
-    pts.forEach((p, i) => { o += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3.4" fill="' + linha.cor + '"><title>' + dashEsc(rotulos[i].t) + ' — ' + dashEsc(linha.nome) + ': ' + fmt(linha.valores[i]) + '</title></circle>'; });
-  }
+  linhas.forEach(ln => {
+    const pts = ln.valores.map((v, i) => [ml + gw * i + gw / 2, y(v)]);
+    o += '<polyline fill="none" stroke="' + ln.cor + '" stroke-width="2.2"' + (ln.tracejado ? ' stroke-dasharray="6 4"' : '') + ' points="' + pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') + '"/>';
+    pts.forEach((p, i) => { o += '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="' + (ln.tracejado ? 2.6 : 3.4) + '" fill="' + ln.cor + '"><title>' + dashEsc(rotulos[i].t) + ' — ' + dashEsc(ln.nome) + ': ' + fmt(ln.valores[i]) + '</title></circle>'; });
+  });
   return o + '</svg>';
 }
 function dashBarraH(rot, valor, max, cor, texto){
@@ -2246,6 +2766,8 @@ function renderDashboard(){
   const porEmp = new Map();
   dashCache.prest.forEach(p => { if (!porEmp.has(p.emprestimo_id)) porEmp.set(p.emprestimo_id, []); porEmp.get(p.emprestimo_id).push(p); });
 
+  renderLembretes(dashCache.emps, porEmp);
+
   // ---- período escolhido ----
   const sel = document.getElementById('dash-periodo').value;
   let inicio;
@@ -2258,6 +2780,8 @@ function renderDashboard(){
   const meses = [];
   for (let m = inicio; m <= mesAtual; m = dashAddMes(m, 1)) meses.push(m);
   const M = new Map(meses.map(m => [m, { emprestado: 0, novos: 0, previsto: 0, recebido: 0, juros: 0 }]));
+  const P = new Map(meses.map(m => [dashAddMes(m, -12), { emprestado: 0, novos: 0, previsto: 0, recebido: 0, juros: 0 }]));   // os mesmos meses, um ano antes
+  const acumular = (ym, f) => { if (M.has(ym)) f(M.get(ym)); if (P.has(ym)) f(P.get(ym)); };
 
   // ---- acumuladores da carteira ----
   const pessoas = new Map();
@@ -2272,19 +2796,17 @@ function renderDashboard(){
     if (estado === 'ANULADO'){ nAnulados++; return; }
     nEmps++; totEmprestado += Number(emp.valor_emprestimo);
     const mi = (emp.data_inicio || '').slice(0, 7);
-    if (M.has(mi)){ M.get(mi).emprestado += Number(emp.valor_emprestimo); M.get(mi).novos++; }
+    acumular(mi, x => { x.emprestado += Number(emp.valor_emprestimo); x.novos++; });
 
     const liquidado = estado === 'LIQUIDADO';
     let saldo = 0, atrasoEmp = 0, maxDias = 0, nAtrasoEmp = 0;
     linhas.forEach(l => {
       const pago = valorPagoPrestacao(l), prest = Number(l.valor_prestacao), juro = Number(l.valor_juro || 0);
       const mp = (l.data_pagamento || '').slice(0, 7);
-      if (pago > 0.004 && M.has(mp)){
-        const m = M.get(mp); m.recebido += pago; if (prest > 0) m.juros += pago * juro / prest;
-      }
+      if (pago > 0.004) acumular(mp, x => { x.recebido += pago; if (prest > 0) x.juros += pago * juro / prest; });
       if (liquidado && pago <= 0.004) return;                      // prestações que ficaram por pagar numa liquidação não contam
       const mv = (l.data_vencimento || '').slice(0, 7);
-      if (l.data_vencimento <= hojeS && M.has(mv)) M.get(mv).previsto += prest;
+      if (l.data_vencimento <= hojeS) acumular(mv, x => { x.previsto += prest; });
       if (liquidado) return;
       const falta = faltaPrestacao(l);
       if (falta <= 0) return;
@@ -2317,29 +2839,44 @@ function renderDashboard(){
   const lista = meses.map(m => M.get(m));
   const soma = k => lista.reduce((s, x) => s + x[k], 0);
   const recebidoP = soma('recebido'), previstoP = soma('previsto'), jurosP = soma('juros'), emprestadoP = soma('emprestado');
+  const listaPrev = meses.map(m => P.get(dashAddMes(m, -12)));
+  const somaP = k => listaPrev.reduce((s, x) => s + x[k], 0);
+  const recebidoA = somaP('recebido'), previstoA = somaP('previsto'), jurosA = somaP('juros'), emprestadoA = somaP('emprestado');
+  const temAnterior = listaPrev.some(x => x.recebido || x.emprestado || x.previsto);
   const cobranca = previstoP > 0 ? recebidoP * 100 / previstoP : null;
+  const cobrancaA = previstoA > 0 ? recebidoA * 100 / previstoA : null;
+  const varTxt = (atual, ant) => !temAnterior ? 'Sem dados do ano anterior' : ant > 0 ? 'Ano anterior: ' + fmt(ant) + ' (' + (atual >= ant ? '+' : '−') + Math.abs((atual - ant) * 100 / ant).toFixed(1).replace('.', ',') + '%)' : (atual > 0 ? 'Ano anterior: 0 (novo)' : 'Ano anterior: 0');
+  const varCls = (atual, ant) => !temAnterior || ant <= 0 ? '' : atual >= ant ? 'ok' : 'neg';
   const par = carteira > 0 ? saldoComAtraso * 100 / carteira : 0;
   const nPessoasAtivas = [...pessoas.values()].filter(p => p.ativos > 0).length;
   const pct = v => v.toFixed(1).replace('.', ',') + '%';
 
   // ---- cartões ----
-  document.getElementById('dash-kpis').innerHTML =
-    dashKpi('Carteira em dívida', fmt(carteira), nAtivos + ' empréstimo(s) em curso') +
-    dashKpi('Total emprestado', fmt(totEmprestado), nEmps + ' empréstimo(s) no total') +
-    dashKpi('Recebido no período', fmt(recebidoP), 'Emprestado no período: ' + fmt(emprestadoP)) +
-    dashKpi('Juros recebidos', fmt(jurosP), recebidoP > 0 ? pct(jurosP * 100 / recebidoP) + ' do recebido' : 'no período') +
-    dashKpi('Cobrança', cobranca == null ? '—' : pct(cobranca), 'Recebido ÷ previsto (' + fmt(previstoP) + ')', cobranca == null ? '' : cobranca >= 90 ? 'ok' : cobranca >= 70 ? 'warn' : 'neg') +
-    dashKpi('Valor em atraso', fmt(atrasoValor), atrasoPrest + ' prestação(ões) · ' + nEmpAtraso + ' empréstimo(s)', atrasoValor > 0 ? 'neg' : '') +
-    dashKpi('Risco da carteira', pct(par), 'Saldo com atraso ÷ carteira', par > 15 ? 'neg' : par > 5 ? 'warn' : 'ok') +
-    dashKpi('Pessoas com empréstimo em curso', String(nPessoasAtivas), nAnulados ? nAnulados + ' anulado(s) fora dos valores' : 'sem anulados');
+  const kpis = [
+    { rot: 'Carteira em dívida', valor: fmt(carteira), sub: nAtivos + ' empréstimo(s) em curso · ' + nPessoasAtivas + ' pessoa(s)' },
+    { rot: 'Total emprestado', valor: fmt(totEmprestado), sub: nEmps + ' empréstimo(s)' + (nAnulados ? ' · ' + nAnulados + ' anulado(s) fora dos valores' : '') },
+    { rot: 'Emprestado no período', valor: fmt(emprestadoP), sub: varTxt(emprestadoP, emprestadoA), subCls: varCls(emprestadoP, emprestadoA) },
+    { rot: 'Recebido no período', valor: fmt(recebidoP), sub: varTxt(recebidoP, recebidoA), subCls: varCls(recebidoP, recebidoA) },
+    { rot: 'Juros recebidos', valor: fmt(jurosP), sub: varTxt(jurosP, jurosA), subCls: varCls(jurosP, jurosA) },
+    { rot: 'Cobrança', valor: cobranca == null ? '—' : pct(cobranca), cls: cobranca == null ? '' : cobranca >= 90 ? 'ok' : cobranca >= 70 ? 'warn' : 'neg',
+      sub: 'Recebido ÷ previsto (' + fmt(previstoP) + ')' + (cobrancaA != null && temAnterior ? ' · ano anterior ' + pct(cobrancaA) : '') },
+    { rot: 'Valor em atraso', valor: fmt(atrasoValor), sub: atrasoPrest + ' prestação(ões) · ' + nEmpAtraso + ' empréstimo(s)', cls: atrasoValor > 0 ? 'neg' : '' },
+    { rot: 'Risco da carteira', valor: pct(par), sub: 'Saldo com atraso ÷ carteira', cls: par > 15 ? 'neg' : par > 5 ? 'warn' : 'ok' }
+  ];
+  document.getElementById('dash-kpis').innerHTML = kpis.map(k =>
+    '<div class="kpi"><div class="k-label">' + dashEsc(k.rot) + '</div><div class="k-value ' + (k.cls || '') + '">' + dashEsc(k.valor) + '</div><div class="k-sub ' + (k.subCls ? 'sub-' + k.subCls : '') + '">' + dashEsc(k.sub) + '</div></div>').join('');
 
   // ---- gráfico mensal ----
   const rot = meses.map(m => ({ l: dashRotuloMes(m), t: dashRotuloMes(m) }));
   const temDados = lista.some(x => x.emprestado || x.previsto || x.recebido);
+  const COR_ANT = '#7c8798';
+  const serieGraf = [{ nome: 'Emprestado', cor: COR_DASH.azulClaro, valores: lista.map(x => x.emprestado) }, { nome: 'Recebido', cor: COR_DASH.azul, valores: lista.map(x => x.recebido) }];
+  const linhasGraf = [{ nome: 'Previsto', cor: COR_DASH.amarelo, valores: lista.map(x => x.previsto) }];
+  const mostrarAnt = temAnterior && listaPrev.some(x => x.recebido > 0);
+  if (mostrarAnt) linhasGraf.push({ nome: 'Recebido (ano anterior)', cor: COR_ANT, tracejado: true, valores: listaPrev.map(x => x.recebido) });
   document.getElementById('dash-mensal').innerHTML = temDados
-    ? dashLegenda([{ nome: 'Emprestado', cor: COR_DASH.azulClaro }, { nome: 'Recebido', cor: COR_DASH.azul }, { nome: 'Previsto (prestações vencidas até hoje)', cor: COR_DASH.amarelo }]) +
-      dashSvgBarras(rot, [{ nome: 'Emprestado', cor: COR_DASH.azulClaro, valores: lista.map(x => x.emprestado) }, { nome: 'Recebido', cor: COR_DASH.azul, valores: lista.map(x => x.recebido) }],
-        { nome: 'Previsto', cor: COR_DASH.amarelo, valores: lista.map(x => x.previsto) })
+    ? dashLegenda([{ nome: 'Emprestado', cor: COR_DASH.azulClaro }, { nome: 'Recebido', cor: COR_DASH.azul }, { nome: 'Previsto (prestações vencidas até hoje)', cor: COR_DASH.amarelo }].concat(mostrarAnt ? [{ nome: 'Recebido no ano anterior (tracejado)', cor: COR_ANT }] : [])) +
+      dashSvgBarras(rot, serieGraf, linhasGraf)
     : '<div class="empty">Ainda não há dados neste período.</div>';
 
   // ---- carteira por estado ----
@@ -2383,11 +2920,26 @@ function renderDashboard(){
 
   // ---- detalhe mensal ----
   const desc = [...meses].reverse();
+  const varMes = (a, b) => (!temAnterior || b <= 0) ? '—' : (a >= b ? '+' : '−') + Math.abs((a - b) * 100 / b).toFixed(1).replace('.', ',') + '%';
+  const cabDet = ['Mês', 'Novos empréstimos', 'Emprestado', 'Previsto', 'Recebido', 'Cobrança', 'Recebido (ano anterior)', 'Variação', 'Juros recebidos'];
+  const linhasDet = desc.map(m => { const x = M.get(m), pa = P.get(dashAddMes(m, -12));
+    return [m, String(x.novos), fmt(x.emprestado), fmt(x.previsto), fmt(x.recebido), x.previsto > 0 ? pct(x.recebido * 100 / x.previsto) : '—', temAnterior ? fmt(pa.recebido) : '—', varMes(x.recebido, pa.recebido), fmt(x.juros)]; });
+  const rodDet = ['Total', String(soma('novos')), fmt(emprestadoP), fmt(previstoP), fmt(recebidoP), cobranca == null ? '—' : pct(cobranca), temAnterior ? fmt(recebidoA) : '—', varMes(recebidoP, recebidoA), fmt(jurosP)];
   document.getElementById('dash-detalhe').innerHTML = temDados
-    ? '<table><thead><tr><th>Mês</th><th class="num">Novos empréstimos</th><th class="num">Emprestado</th><th class="num">Previsto</th><th class="num">Recebido</th><th class="num">Cobrança</th><th class="num">Juros recebidos</th></tr></thead><tbody>' +
-      desc.map(m => { const x = M.get(m); return '<tr><td>' + m + '</td><td class="num">' + x.novos + '</td><td class="num">' + fmt(x.emprestado) + '</td><td class="num">' + fmt(x.previsto) + '</td><td class="num">' + fmt(x.recebido) + '</td><td class="num">' + (x.previsto > 0 ? pct(x.recebido * 100 / x.previsto) : '—') + '</td><td class="num">' + fmt(x.juros) + '</td></tr>'; }).join('') +
-      '</tbody><tfoot><tr><td><strong>Total</strong></td><td class="num"><strong>' + soma('novos') + '</strong></td><td class="num"><strong>' + fmt(emprestadoP) + '</strong></td><td class="num"><strong>' + fmt(previstoP) + '</strong></td><td class="num"><strong>' + fmt(recebidoP) + '</strong></td><td class="num"><strong>' + (cobranca == null ? '—' : pct(cobranca)) + '</strong></td><td class="num"><strong>' + fmt(jurosP) + '</strong></td></tr></tfoot></table>'
+    ? '<table><thead><tr>' + cabDet.map((c, i) => '<th' + (i ? ' class="num"' : '') + '>' + c + '</th>').join('') + '</tr></thead><tbody>' +
+      linhasDet.map(r => '<tr>' + r.map((c, i) => '<td' + (i ? ' class="num"' : '') + '>' + dashEsc(c) + '</td>').join('') + '</tr>').join('') +
+      '</tbody><tfoot><tr>' + rodDet.map((c, i) => '<td' + (i ? ' class="num"' : '') + '><strong>' + dashEsc(c) + '</strong></td>').join('') + '</tr></tfoot></table>'
     : '<div class="empty">Ainda não há dados neste período.</div>';
+
+  // ---- guarda o que está no ecrã para poder exportar em PDF ----
+  const opt = document.getElementById('dash-periodo').selectedOptions[0].textContent;
+  dashUltimo = {
+    periodoTxt: opt + ' (' + dashRotuloMes(meses[0]) + ' a ' + dashRotuloMes(meses[meses.length - 1]) + ')' + (temAnterior ? ' · comparação com o mesmo período do ano anterior' : ''),
+    kpis, rotulos: meses.map(dashRotuloMes), series: serieGraf, linhas: linhasGraf, temDados,
+    detalhe: { cab: cabDet, corpo: linhasDet, rodape: rodDet },
+    atrasos: { cab: ['Pessoa', 'Prestações em atraso', 'Valor em atraso', 'Atraso mais antigo (dias)', 'Em dívida'], corpo: topAtraso.map(p => [p.nome, String(p.prestAtraso), fmt(p.atraso), String(p.maxDias), fmt(p.saldo)]) },
+    saldos: { cab: ['Pessoa', 'Empréstimos', 'Em dívida', '% da carteira'], corpo: topSaldo.map(p => [p.nome, String(p.ativos), fmt(p.saldo), pct(p.saldo * 100 / carteira)]) }
+  };
 }
 
 async function criarEmprestimo(){
@@ -2640,6 +3192,8 @@ async function verMapa(emp){
   const { data, error } = await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', emp.id).order('numero_prestacao');
   if (error){ log('Erro: ' + error.message, true); return; }
   document.getElementById('mapa-section').style.display = 'block';
+  document.getElementById('docs-section').style.display = 'block';
+  carregarDocumentos();
   document.querySelectorAll('#tabela-emprestimos tr.loan-row').forEach(r => r.classList.toggle('selected', r.dataset.id == emp.id));
   const pagas = data.filter(r => r.estado === 'PAGO').length;
   const atrasadas = data.filter(r => estadoPrestacao(r) === 'ATRASADO').length;
@@ -2841,13 +3395,27 @@ function faltaPrestacao(row){
   return f < 0.5 ? 0 : arred(f);
 }
 
+// ---- simulação (pré-visualização): nada é gravado; as alterações ficam numa camada em memória ----
+let SIM = null;
+function aplicarOverlay(rows){
+  if (!SIM) return rows;
+  return rows.map(r => SIM.overlay.has(r.id) ? { ...r, ...SIM.overlay.get(r.id) } : r);
+}
+async function escreverLinha(id, patch){
+  if (SIM){ SIM.overlay.set(id, { ...(SIM.overlay.get(id) || {}), ...patch }); return {}; }
+  return await sb.from('mapa_amortizacao').update(patch).eq('id', id);
+}
+async function registarEntradaBanco(mov){
+  if (SIM) return { data: { id: null } };
+  return await sb.from('movimentos_banco').insert(mov).select('id').single();
+}
 // Aplica um pagamento a partir de uma prestação; o excedente passa às seguintes do mesmo empréstimo.
 // Cada prestação tocada gera uma entrada no banco. Devolve { aplicados, sobra } ou { erro }.
 async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
   const re = await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', rowInicial.emprestimo_id)
     .neq('estado', 'PAGO').order('numero_prestacao');
   if (re.error) return { erro: re.error.message };
-  const fila = (re.data || []).filter(r => r.numero_prestacao >= rowInicial.numero_prestacao);
+  const fila = aplicarOverlay(re.data || []).filter(r => r.estado !== 'PAGO' && r.numero_prestacao >= rowInicial.numero_prestacao);
   let restante = arred(valor);
   const aplicados = [];
   for (const r of fila){
@@ -2858,7 +3426,7 @@ async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
     if (falta === 0){   // já coberta: só fecha a prestação
       const fecha = { estado:'PAGO', data_pagamento: dataPag };
       if (temColuna) fecha.valor_pago = arred(Math.max(ja, Number(r.valor_prestacao)));
-      const uf = await sb.from('mapa_amortizacao').update(fecha).eq('id', r.id);
+      const uf = await escreverLinha(r.id, fecha);
       if (uf.error) return { erro: uf.error.message, aplicados };
       continue;
     }
@@ -2870,12 +3438,12 @@ async function aplicarPagamento(rowInicial, valor, dataPag, sufixoDesc){
     }
     const patch = completa ? { estado:'PAGO', data_pagamento: dataPag } : { data_pagamento: dataPag };
     if (temColuna) patch.valor_pago = arred(ja + paga);
-    const up = await sb.from('mapa_amortizacao').update(patch).eq('id', r.id);
+    const up = await escreverLinha(r.id, patch);
     if (up.error) return { erro: up.error.message, aplicados };
-    const mv = await sb.from('movimentos_banco').insert({
+    const mv = await registarEntradaBanco({
       tipo:'ENTRADA', valor: arred(paga), data: dataPag,
       descricao: 'Pagamento prestação nº ' + r.numero_prestacao + ' (empréstimo ' + r.emprestimo_id + ')' + (completa ? '' : ' — parcial') + (sufixoDesc || '')
-    }).select('id').single();
+    });
     aplicados.push({ row: r, valor: arred(paga), completa, faltaApos: completa ? 0 : arred(falta - paga), movId: (mv && mv.data) ? mv.data.id : null });
     restante = arred(restante - paga);
     if (!completa) break;
@@ -3175,7 +3743,7 @@ async function proximaPrestacaoPorNif(nif, empId){
   const rp = await sb.from('mapa_amortizacao').select('*').in('emprestimo_id', ativos.map(e => e.id)).neq('estado', 'PAGO').order('numero_prestacao');
   if (rp.error) return { erro: rp.error.message };
   const primeira = new Map();
-  (rp.data || []).forEach(r => { if (!primeira.has(r.emprestimo_id)) primeira.set(r.emprestimo_id, r); });
+  aplicarOverlay(rp.data || []).filter(r => r.estado !== 'PAGO').forEach(r => { if (!primeira.has(r.emprestimo_id)) primeira.set(r.emprestimo_id, r); });
   const opcoes = ativos.filter(e => primeira.has(e.id)).map(e => ({ emp: e, row: primeira.get(e.id) }));
   if (!opcoes.length) return { erro: 'Este NIF não tem prestações por pagar.' };
   return { opcoes };
@@ -3253,8 +3821,9 @@ async function devidoDoMesLinha(row){
   let v = faltaPrestacao(row);
   if (valorPagoPrestacao(row) > 0.004){
     const r = await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', row.emprestimo_id)
-      .neq('estado', 'PAGO').gt('numero_prestacao', row.numero_prestacao).order('numero_prestacao').limit(1);
-    if (!r.error && r.data && r.data[0]) v += faltaPrestacao(r.data[0]);
+      .neq('estado', 'PAGO').gt('numero_prestacao', row.numero_prestacao).order('numero_prestacao');
+    const seguinte = !r.error ? aplicarOverlay(r.data || []).filter(x => x.estado !== 'PAGO')[0] : null;
+    if (seguinte) v += faltaPrestacao(seguinte);
   }
   return v;
 }
@@ -3342,55 +3911,15 @@ async function importarPagamentosExcel(){
   };
   if (col.data < 0){ logEl.textContent = 'Não encontrei a coluna "Data Pagamento" no ficheiro.'; return; }
 
-  let processadas = 0, ignoradas = 0;
-  const erros = [], avisos = [], pagamentosFeitos = [];
+  // fase 1: simulação (nada é gravado) e pré-visualização
+  logEl.textContent = 'A preparar a pré-visualização...';
+  const plano = await executarImportacao(m, hRow, col, true, new Set(), logEl);
+  const decisao = await mostrarPreviewImportacao(plano);
+  if (!decisao){ logEl.textContent = 'Importação cancelada. Nada foi gravado.'; return; }
 
-  for (let i = hRow + 1; i < m.length; i++){
-    const r = m[i];
-    if (!r.some(c => c !== '' && c !== null && c !== undefined)) continue;
-    const lin = i + 1;
-    const dataPag = dataCelula(r[col.data]);
-    if (!dataPag){ ignoradas++; continue; }          // sem Data Pagamento: não é para processar
-    logEl.textContent = 'A processar linha ' + lin + ' de ' + m.length + '...';
-    try {
-      const nif = String(r[col.nif] ?? '').trim();
-      const idPrest = col.id >= 0 ? parseInt(numeroCelula(r[col.id]), 10) : NaN;
-      const empId = col.emp >= 0 ? parseInt(numeroCelula(r[col.emp]), 10) : NaN;
-      const valorPagoCel = col.pago >= 0 ? inteiro(numeroCelula(r[col.pago])) : NaN;
-
-      let row = null, multi = null;
-      if (idPrest){                                    // ID da prestação preenchido: tem prioridade
-        const { data, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrest).maybeSingle();
-        if (error || !data){ erros.push('Linha ' + lin + ': prestação com ID ' + idPrest + ' não encontrada'); continue; }
-        if (data.estado === 'PAGO'){ ignoradas++; continue; }
-        row = data;
-      } else {
-        if (!nif){ erros.push('Linha ' + lin + ': falta o NIF'); continue; }
-        const res = await proximaPrestacaoPorNif(nif, empId || null);
-        if (res.erro){ erros.push('Linha ' + lin + ': ' + res.erro); continue; }
-        if (res.opcoes.length > 1) multi = res.opcoes;
-        else row = res.opcoes[0].row;
-      }
-
-      const informado = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : null;
-      let resp;
-      if (multi){
-        let somaDevido = 0;
-        for (const o of multi) somaDevido += await devidoDoMesLinha(o.row);
-        const devido = arred(somaDevido);
-        resp = await aplicarPagamentoPessoa(nif, multi, informado !== null ? informado : devido, dataPag, ' — importado de Excel');
-      } else {
-        resp = await aplicarPagamento(row, informado !== null ? informado : arred(await devidoDoMesLinha(row)), dataPag, ' — importado de Excel');
-      }
-      if (resp.erro){ erros.push('Linha ' + lin + ': ' + resp.erro); continue; }
-      if (resp.sobra > 0.01) avisos.push('Linha ' + lin + ': sobraram ' + fmt(resp.sobra) + ' sem prestação onde aplicar');
-      processadas++;
-      pagamentosFeitos.push({ aplicados: resp.aplicados, dataPag });
-    } catch (e){
-      erros.push('Linha ' + lin + ': ' + (e && e.message ? e.message : e));
-    }
-  }
-
+  // fase 2: aplicar de verdade
+  const res = await executarImportacao(m, hRow, col, false, decisao.saltar, logEl);
+  const { processadas, ignoradas, erros, avisos, pagamentosFeitos } = res;
   let msg = processadas + ' pagamento(s) processado(s), ' + ignoradas + ' ignorada(s), ' + erros.length + ' com erro.';
   if (erros.length) msg += '\n' + erros.slice(0, 10).join('\n') + (erros.length > 10 ? '\n... e mais ' + (erros.length - 10) + ' erro(s)' : '');
   if (avisos.length) msg += '\n' + avisos.slice(0, 10).join('\n');
@@ -3401,6 +3930,136 @@ async function importarPagamentosExcel(){
   if (pagamentosFeitos.length && await confirmar('Gerar recibos?', 'Foram registados ' + pagamentosFeitos.length + ' pagamento(s). Queres gerar um PDF com os recibos (um por prestação paga)?', 'Gerar recibos')){
     await emitirRecibos(pagamentosFeitos);
   }
+}
+
+// Percorre o ficheiro linha a linha. Com simular=true nada é gravado (as prestações tocadas ficam numa camada em memória,
+// para que linhas seguintes do mesmo empréstimo vejam o resultado das anteriores) e devolve o detalhe de cada linha.
+async function executarImportacao(m, hRow, col, simular, saltar, logEl){
+  SIM = simular ? { overlay: new Map() } : null;
+  ocupado++;
+  let processadas = 0, ignoradas = 0;
+  const erros = [], avisos = [], pagamentosFeitos = [], detalhes = [], vistos = new Set();
+  const hojeS = hoje();
+  try {
+    for (let i = hRow + 1; i < m.length; i++){
+      const r = m[i];
+      if (!r.some(c => c !== '' && c !== null && c !== undefined)) continue;
+      const lin = i + 1;
+      const dataPag = dataCelula(r[col.data]);
+      if (!dataPag){ ignoradas++; continue; }          // sem Data Pagamento: não é para processar
+      logEl.textContent = (simular ? 'A simular' : 'A processar') + ' linha ' + lin + ' de ' + m.length + '...';
+      const nif = String(r[col.nif] ?? '').trim();
+      const det = { lin, nif, data: dataPag, valor: 0, texto: '', estado: 'ok', dup: false };
+      detalhes.push(det);
+      if (!simular && saltar && saltar.has(lin)){ ignoradas++; det.estado = 'ignorada'; continue; }
+      try {
+        const idPrest = col.id >= 0 ? parseInt(numeroCelula(r[col.id]), 10) : NaN;
+        const empId = col.emp >= 0 ? parseInt(numeroCelula(r[col.emp]), 10) : NaN;
+        const valorPagoCel = col.pago >= 0 ? inteiro(numeroCelula(r[col.pago])) : NaN;
+
+        let row = null, multi = null;
+        if (idPrest){                                    // ID da prestação preenchido: tem prioridade
+          let { data, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrest).maybeSingle();
+          if (data) data = aplicarOverlay([data])[0];
+          if (error || !data){ erros.push('Linha ' + lin + ': prestação com ID ' + idPrest + ' não encontrada'); det.estado = 'erro'; det.texto = 'Prestação com ID ' + idPrest + ' não encontrada'; continue; }
+          if (data.estado === 'PAGO'){ ignoradas++; det.estado = 'ignorada'; det.texto = 'A prestação já está paga'; continue; }
+          row = data;
+        } else {
+          if (!nif){ erros.push('Linha ' + lin + ': falta o NIF'); det.estado = 'erro'; det.texto = 'Falta o NIF'; continue; }
+          const res = await proximaPrestacaoPorNif(nif, empId || null);
+          if (res.erro){ erros.push('Linha ' + lin + ': ' + res.erro); det.estado = 'erro'; det.texto = res.erro; continue; }
+          if (res.opcoes.length > 1) multi = res.opcoes;
+          else row = res.opcoes[0].row;
+        }
+
+        const informado = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : null;
+        let resp;
+        if (multi){
+          let somaDevido = 0;
+          for (const o of multi) somaDevido += await devidoDoMesLinha(o.row);
+          const devido = arred(somaDevido);
+          resp = await aplicarPagamentoPessoa(nif, multi, informado !== null ? informado : devido, dataPag, ' — importado de Excel');
+        } else {
+          resp = await aplicarPagamento(row, informado !== null ? informado : arred(await devidoDoMesLinha(row)), dataPag, ' — importado de Excel');
+        }
+        if (resp.erro){ erros.push('Linha ' + lin + ': ' + resp.erro); det.estado = 'erro'; det.texto = resp.erro; continue; }
+        det.valor = arred(resp.aplicados.reduce((s, a) => s + a.valor, 0));
+        det.texto = descreverPagamento(resp);
+        if (resp.sobra > 0.01){ avisos.push('Linha ' + lin + ': sobraram ' + fmt(resp.sobra) + ' sem prestação onde aplicar'); det.estado = 'aviso'; }
+        processadas++;
+        pagamentosFeitos.push({ aplicados: resp.aplicados, dataPag });
+
+        if (simular){
+          // avisos de segurança: data no futuro, linha repetida no ficheiro, entrada igual já lançada no banco
+          const avisosLinha = [];
+          if (dataPag > hojeS) avisosLinha.push('data no futuro');
+          const chave = nif + '|' + dataPag + '|' + (informado === null ? 'auto' : informado) + '|' + (idPrest || empId || '');
+          if (vistos.has(chave)){ avisosLinha.push('linha repetida no ficheiro'); det.dup = true; }
+          vistos.add(chave);
+          for (const a of resp.aplicados){
+            const q = await sb.from('movimentos_banco').select('id').eq('tipo', 'ENTRADA').eq('data', dataPag)
+              .ilike('descricao', 'Pagamento prestação nº ' + a.row.numero_prestacao + ' (empréstimo ' + a.row.emprestimo_id + ')%');
+            if (!q.error && (q.data || []).length){ avisosLinha.push('já existe uma entrada do banco igual (prestação nº ' + a.row.numero_prestacao + ')'); det.dup = true; break; }
+          }
+          if (avisosLinha.length){ det.estado = 'aviso'; det.texto += ' — ATENÇÃO: ' + avisosLinha.join('; '); }
+        }
+      } catch (e){
+        erros.push('Linha ' + lin + ': ' + (e && e.message ? e.message : e));
+        det.estado = 'erro'; det.texto = e && e.message ? e.message : String(e);
+      }
+    }
+    if (simular && detalhes.length){                      // nomes das pessoas, só para a pré-visualização
+      const nifs = [...new Set(detalhes.map(d => d.nif).filter(Boolean))];
+      const rn = nifs.length ? await sb.from('pessoas').select('nif, nome').in('nif', nifs) : { data: [] };
+      const nomes = new Map(((rn && rn.data) || []).map(p => [String(p.nif), p.nome]));
+      detalhes.forEach(d => { d.nome = nomes.get(String(d.nif)) || ''; });
+    }
+  } finally { SIM = null; ocupado--; }
+  return { detalhes, processadas, ignoradas, erros, avisos, pagamentosFeitos };
+}
+
+// Mostra o que vai acontecer a cada linha e pede confirmação. Devolve { saltar: Set de linhas } ou null.
+function mostrarPreviewImportacao(plano){
+  return new Promise(resolve => {
+    const modal = document.getElementById('modal-import');
+    const est = { ok: 'Pronto', aviso: 'Atenção', erro: 'Erro', ignorada: 'Ignorada' };
+    const cor = { ok: 'var(--ok)', aviso: 'var(--warn)', erro: 'var(--danger)', ignorada: 'var(--muted)' };
+    const nAvisos = plano.detalhes.filter(d => d.estado === 'aviso').length;
+    const nErros = plano.detalhes.filter(d => d.estado === 'erro').length;
+    const nIgn = plano.detalhes.filter(d => d.estado === 'ignorada').length;
+    const nDup = plano.detalhes.filter(d => d.dup).length;
+    const saltarDup = document.getElementById('mi-saltar-dup');
+    saltarDup.checked = true;
+    document.getElementById('mi-saltar-wrap').style.display = nDup ? 'flex' : 'none';
+
+    const aplicaveis = () => plano.detalhes.filter(d => (d.estado === 'ok' || d.estado === 'aviso') && !(saltarDup.checked && d.dup));
+    const ok = document.getElementById('mi-ok');
+    const atualizar = () => {
+      const ap = aplicaveis(), total = ap.reduce((s, d) => s + d.valor, 0);
+      document.getElementById('mi-resumo').textContent =
+        ap.length + ' pagamento(s) a lançar, num total de ' + fmt(total) + '.  ' + nAvisos + ' com atenção · ' + nErros + ' com erro · ' + nIgn + ' ignorada(s). Nada foi gravado ainda.';
+      ok.textContent = ap.length ? 'Aplicar ' + ap.length + ' pagamento(s)' : 'Nada para aplicar';
+      ok.disabled = ap.length === 0;
+    };
+    const so = document.getElementById('mi-so-problemas');
+    const desenhar = () => {
+      const linhas = plano.detalhes.filter(d => !so.checked || d.estado !== 'ok');
+      document.getElementById('mi-corpo').innerHTML = linhas.length
+        ? linhas.map(d => '<tr><td>' + d.lin + '</td><td>' + dashEsc(d.nif) + '</td><td>' + dashEsc(d.nome || '') + '</td><td>' + dashEsc(d.data) + '</td>' +
+            '<td class="num">' + (d.valor ? fmt(d.valor) : '—') + '</td><td style="white-space:normal;min-width:260px;">' + dashEsc(d.texto || '') + '</td>' +
+            '<td style="color:' + cor[d.estado] + ';font-weight:700;">' + est[d.estado] + (d.dup && saltarDup.checked ? ' (será saltada)' : '') + '</td></tr>').join('')
+        : '<tr><td colspan="7" class="empty">Não há linhas para mostrar.</td></tr>';
+    };
+    so.checked = false; so.onchange = desenhar; saltarDup.onchange = () => { atualizar(); desenhar(); };
+    desenhar(); atualizar();
+    modal.classList.add('open');
+    const fechar = v => { modal.classList.remove('open'); ok.onclick = null; document.getElementById('mi-cancel').onclick = null; resolve(v); };
+    ok.onclick = () => {
+      const saltar = new Set(plano.detalhes.filter(d => saltarDup.checked && d.dup).map(d => d.lin));
+      fechar({ saltar });
+    };
+    document.getElementById('mi-cancel').onclick = () => fechar(null);
+  });
 }
 
 /* ---------- BANCO ---------- */
@@ -3430,7 +4089,7 @@ async function carregarBanco(){
     const tr = document.createElement('tr');
     const tipoLabel = m.tipo === 'SALDO_INICIAL' ? 'Saldo inicial' : (m.tipo === 'ENTRADA' ? 'Entrada' : 'Saída');
     const badgeClass = m.tipo === 'SAIDA' ? 'saida' : 'entrada';
-    tr.innerHTML = `<td>${m.data}</td><td><span class="badge ${badgeClass}">${tipoLabel}</span></td><td>${m.descricao || ''}</td><td class="num ${m.tipo === 'SAIDA' ? 'neg' : 'pos'}">${m.tipo === 'SAIDA' ? '−' : '+'}${fmt(m.valor)}</td><td class="num">${fmt(saldo)}</td>`;
+    tr.innerHTML = `<td>${m.data}</td><td><span class="badge ${badgeClass}">${tipoLabel}</span></td><td>${escH(m.descricao || '')}</td><td class="num ${m.tipo === 'SAIDA' ? 'neg' : 'pos'}">${m.tipo === 'SAIDA' ? '−' : '+'}${fmt(m.valor)}</td><td class="num">${fmt(saldo)}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -3478,7 +4137,8 @@ async function carregarCheques(){
     const tr = document.createElement('tr');
     const badgeClass = c.estado === 'EMITIDO' ? 'emitido' : (c.estado === 'COMPENSADO' ? 'compensado' : 'cancelado');
     const podeAnular = c.estado === 'EMITIDO' && meuPapel === 'gestao';
-    tr.innerHTML = `<td>${c.numero_cheque}</td><td>${c.data_emissao}</td><td>${c.beneficiario}</td><td class="num">${fmt(c.valor)}</td><td><span class="badge ${badgeClass}">${c.estado}</span></td><td><button class="small ghost" onclick='imprimirCheque(${JSON.stringify(c)})'>Imprimir</button> ${podeAnular ? `<button class="small danger" onclick="anularCheque(${c.id})">Anular</button>` : ''}</td>`;
+    tr.innerHTML = `<td>${escH(c.numero_cheque)}</td><td>${escH(c.data_emissao)}</td><td>${escH(c.beneficiario)}</td><td class="num">${fmt(c.valor)}</td><td><span class="badge ${badgeClass}">${escH(c.estado)}</span></td><td><button class="small ghost" data-imprimir="1">Imprimir</button> ${podeAnular ? `<button class="small danger" onclick="anularCheque(${c.id})">Anular</button>` : ''}</td>`;
+    tr.querySelector('[data-imprimir]').onclick = () => imprimirCheque(c);
     tbody.appendChild(tr);
   });
 }
