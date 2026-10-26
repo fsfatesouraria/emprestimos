@@ -3245,30 +3245,48 @@ function mostrarEditarEmprestimo(){
   document.getElementById('editar-emprestimo').style.display = 'block';
 }
 
+let editandoEmprestimo = false;
 async function guardarEdicaoEmprestimo(){
   if (!requireGestao() || !emprestimoAtual) return;
+  if (editandoEmprestimo) return;                       // evita um segundo clique enquanto o primeiro ainda está a gravar
+  const botao = document.querySelector('#editar-emprestimo .btn-row button:not(.ghost)');
+  const textoBotao = botao ? botao.textContent : '';
+  const passo = t => { if (botao) botao.textContent = t; };
+  editandoEmprestimo = true; if (botao) botao.disabled = true;
+  try { await edicaoEmprestimo(passo); }
+  catch (e){ log('Erro ao editar o empréstimo: ' + (e && e.message ? e.message : e), true); }
+  finally { editandoEmprestimo = false; if (botao){ botao.disabled = false; botao.textContent = textoBotao; } }
+}
+
+async function edicaoEmprestimo(passo){
   const valor = Math.round(parseFloat(document.getElementById('edit-emp-valor').value));
   const taxa = parseFloat(document.getElementById('edit-emp-taxa').value);
   const nPrestacoes = parseInt(document.getElementById('edit-emp-prestacoes').value, 10);
   const periodicidade = document.getElementById('edit-emp-periodicidade').value;
   const dataInicio = document.getElementById('edit-emp-data').value;
   if (!valor || !nPrestacoes || !dataInicio || isNaN(taxa)){ log('Preenche todos os campos.', true); return; }
+  const idEmp = emprestimoAtual.id;
+  const lerMapa = async () => await sb.from('mapa_amortizacao').select('*').eq('emprestimo_id', idEmp).order('numero_prestacao');
 
-  const antigas = mapaAtualLinhas.slice();
+  // o que já foi recebido, lido AGORA da base de dados (a lista do ecrã pode estar desatualizada)
+  const r0 = await lerMapa();
+  if (r0.error){ log('Erro ao ler o mapa: ' + r0.error.message, true); return; }
+  const antigas = r0.data || [];
   const pagoTotal = arred(antigas.reduce((s, r) => s + valorPagoPrestacao(r), 0));
   const texto = pagoTotal > 0.004
-    ? 'O mapa atual vai ser apagado e substituído por um novo. Os ' + fmt(pagoTotal) + ' já recebidos são redistribuídos pelas primeiras prestações do novo mapa; os movimentos do banco não são alterados.'
-    : 'O mapa atual deste empréstimo vai ser apagado e substituído por um novo, calculado com estes valores.';
+    ? 'O mapa de amortização vai ser recalculado com estes valores. Os ' + fmt(pagoTotal) + ' já recebidos são redistribuídos pelas primeiras prestações do novo mapa; os movimentos do banco não são alterados.'
+    : 'O mapa de amortização deste empréstimo vai ser recalculado com estes valores.';
   if (!await confirmar('Recalcular mapa de amortização?', texto, 'Guardar e recalcular', true)) return;
 
   const anterior = {
     valor_emprestimo: emprestimoAtual.valor_emprestimo, taxa_juro_anual: emprestimoAtual.taxa_juro_anual,
     numero_prestacoes: emprestimoAtual.numero_prestacoes, periodicidade: emprestimoAtual.periodicidade, data_inicio: emprestimoAtual.data_inicio
   };
+  passo('A guardar...');
   const { error: errUpd } = await sb.from('emprestimos').update({
     valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio
-  }).eq('id', emprestimoAtual.id);
-  if (errUpd){ log('Erro: ' + errUpd.message, true); return; }
+  }).eq('id', idEmp);
+  if (errUpd){ log('Não foi possível guardar o empréstimo: ' + errUpd.message + (errUpd.details ? ' — ' + errUpd.details : '') + (errUpd.code ? ' [' + errUpd.code + ']' : ''), true); return; }
 
   const temColuna = antigas.length ? antigas[0].valor_pago !== undefined : await temColunaValorPago();
   const datasPagas = antigas.filter(r => valorPagoPrestacao(r) > 0.004)
@@ -3291,13 +3309,57 @@ async function guardarEdicaoEmprestimo(){
   }
   if (temColuna) linhas.forEach(l => { if (l.valor_pago === undefined) l.valor_pago = 0; });
 
-  const novas = linhas.map(l => ({ ...l, emprestimo_id: emprestimoAtual.id }));
-  const { error: errMapa } = await sb.from('mapa_amortizacao').insert(novas);
-  if (errMapa){
-    await sb.from('emprestimos').update(anterior).eq('id', emprestimoAtual.id);   // volta atrás: o mapa antigo mantém-se
-    log('Não foi possível recalcular o mapa: ' + errMapa.message, true); return;
+  // Estado ATUAL do mapa (depois de gravar o empréstimo): é com ele que se trabalha, para nunca haver duas prestações com o mesmo número.
+  const rf = await lerMapa();
+  const voltarEmprestimo = async () => { await sb.from('emprestimos').update(anterior).eq('id', idEmp); };
+  if (rf.error){ await voltarEmprestimo(); log('Erro ao ler o mapa: ' + rf.error.message + '. Nada foi alterado.', true); return; }
+  const atuais = (rf.data || []).slice().sort((a, b) => a.numero_prestacao - b.numero_prestacao);
+
+  const camposDe = (l, comPago) => {
+    const o = { numero_prestacao: l.numero_prestacao, data_vencimento: l.data_vencimento, valor_prestacao: l.valor_prestacao, valor_juro: l.valor_juro,
+      valor_capital: l.valor_capital, capital_em_divida: l.capital_em_divida, estado: l.estado, data_pagamento: l.data_pagamento || null };
+    if (comPago) o.valor_pago = l.valor_pago == null ? 0 : l.valor_pago;
+    return o;
+  };
+  const TEMP = 1000000;                                          // números provisórios, só para nunca haver repetidos durante a troca
+  const comuns = Math.min(atuais.length, linhas.length);
+  const irregular = atuais.some((r, i) => r.numero_prestacao !== i + 1);   // numeração que não é 1, 2, 3...
+  const tocadas = []; let inseridos = [], erroMapa = null, feitos = 0;
+  const total = (irregular ? atuais.length : 0) + comuns + 1;
+  const avancar = () => passo('A guardar... ' + (++feitos) + '/' + total);
+
+  if (irregular){
+    for (let i = 0; i < atuais.length && !erroMapa; i++){
+      const r = await sb.from('mapa_amortizacao').update({ numero_prestacao: TEMP + i }).eq('id', atuais[i].id);
+      if (r.error) erroMapa = r.error; else { tocadas.push(i); avancar(); }
+    }
   }
-  if (antigas.length) await sb.from('mapa_amortizacao').delete().in('id', antigas.map(r => r.id));
+  for (let i = 0; i < comuns && !erroMapa; i++){
+    const r = await sb.from('mapa_amortizacao').update(camposDe(linhas[i], temColuna)).eq('id', atuais[i].id);
+    if (r.error) erroMapa = r.error; else { if (!tocadas.includes(i)) tocadas.push(i); avancar(); }
+  }
+  if (!erroMapa && linhas.length > comuns){
+    const r = await sb.from('mapa_amortizacao').insert(linhas.slice(comuns).map(l => ({ ...camposDe(l, temColuna), emprestimo_id: idEmp }))).select('id');
+    if (r.error) erroMapa = r.error; else inseridos = (r.data || []).map(x => x.id);
+  }
+  if (!erroMapa && atuais.length > comuns){
+    const r = await sb.from('mapa_amortizacao').delete().in('id', atuais.slice(comuns).map(x => x.id));
+    if (r.error) erroMapa = r.error;
+  }
+
+  if (erroMapa){
+    // volta atrás: apaga as novas, repõe as prestações que já tinham sido reescritas e repõe os dados do empréstimo
+    if (inseridos.length) await sb.from('mapa_amortizacao').delete().in('id', inseridos);
+    for (const i of tocadas) await sb.from('mapa_amortizacao').update({ numero_prestacao: TEMP + 500000 + i }).eq('id', atuais[i].id);
+    for (const i of tocadas) await sb.from('mapa_amortizacao').update(camposDe(atuais[i], atuais[i].valor_pago !== undefined)).eq('id', atuais[i].id);
+    await voltarEmprestimo();
+    const dg = await sb.from('mapa_amortizacao').select('numero_prestacao').eq('emprestimo_id', idEmp).order('numero_prestacao');
+    const nums = (dg.data || []).map(x => x.numero_prestacao);
+    const estadoBD = nums.length ? ' Na base de dados o mapa tem ' + nums.length + ' prestações (nº ' + nums[0] + ' a ' + nums[nums.length - 1] + ').' : '';
+    log('Não foi possível recalcular o mapa: ' + erroMapa.message + (erroMapa.details ? ' — ' + erroMapa.details : '') + (erroMapa.hint ? ' (' + erroMapa.hint + ')' : '') + (erroMapa.code ? ' [' + erroMapa.code + ']' : '') + '. Nada foi alterado.' + estadoBD, true);
+    verMapa(emprestimoAtual);
+    return;
+  }
 
   log('Empréstimo atualizado e mapa recalculado.' + (restante > 0.01 ? ' Atenção: sobraram ' + fmt(restante) + ' dos valores recebidos sem prestação onde aplicar.' : ''));
   emprestimoAtual = { ...emprestimoAtual, valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio };
