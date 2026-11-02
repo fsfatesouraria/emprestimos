@@ -429,6 +429,12 @@
 
   #modal-senha{position:fixed;inset:0;z-index:210;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(20,24,32,.6);}
   #modal-senha.open{display:flex;}
+
+  .kpis-showroom{grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:12px;}
+  .kpis-showroom .kpi{padding:9px 8px;text-align:center;}
+  .kpis-showroom .k-label{font-size:10px;} .kpis-showroom .k-value{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  @media (max-width:1000px){ .kpis-showroom{grid-template-columns:repeat(3,minmax(0,1fr));} }
+  .mapa-showroom{font-weight:700;color:var(--accent);padding:0 0 8px;font-size:13px;}
 </style>
 
 </head>
@@ -482,6 +488,7 @@
   <div class="side-group">
     <div class="side-title">Empréstimos</div>
     <button class="side-link" data-view="emprestimos" onclick="mudarVista('emprestimos')">Novo / Pesquisar</button>
+    <button class="side-link" data-view="showroom" onclick="mudarVista('showroom')">Showroom</button>
     <button class="side-link active" data-view="lista" onclick="mudarVista('lista')">Lista de empréstimos</button>
     <button class="side-link" data-view="pagamentos" onclick="mudarVista('pagamentos')">Pagamentos</button>
     <button class="side-link" data-view="simulador" onclick="mudarVista('simulador')">Simulador</button>
@@ -498,6 +505,7 @@
   <div class="side-group">
     <div class="side-title">Administração</div>
     <button class="side-link gestao-only" data-view="utilizadores" onclick="mudarVista('utilizadores')">Utilizadores</button>
+    <button class="side-link gestao-only" data-view="registo" onclick="mudarVista('registo')">Registo de alterações</button>
     <button class="side-link" data-view="conta" onclick="mudarVista('conta')">A minha conta</button>
   </div>
   <div class="side-bottom">
@@ -632,12 +640,14 @@
 
         <section class="panel" id="mapa-section" style="display:none">
           <h2>Mapa de amortização <small id="mapa-sub"></small></h2>
+          <div id="mapa-showroom" class="mapa-showroom" style="display:none"></div>
           <div class="progress-wrap">
             <div class="progress-head"><span id="mapa-progress-label"></span><span>Capital em dívida: <strong id="mapa-divida">0</strong></span></div>
             <div class="progress"><i id="mapa-progress-bar"></i></div>
           </div>
           <div class="btn-row gestao-only" id="emp-acoes">
             <button class="ghost" onclick="mostrarEditarEmprestimo()" id="btn-editar-emp">Editar empréstimo</button>
+            <button class="ghost gestao-only" onclick="verHistoricoEmprestimo()" title="Quem alterou este empréstimo e quando">Histórico</button>
             <button class="ghost" onclick="liquidarAntecipadamente()" id="btn-liquidar-emp">Liquidar antecipadamente</button>
             <button class="danger" onclick="anularEmprestimo()" id="btn-anular-emp">Anular empréstimo</button>
           </div>
@@ -645,6 +655,7 @@
           <div id="editar-emprestimo" class="gestao-only" style="display:none">
             <hr class="divider">
             <div class="empty">A editar este empréstimo — o mapa é recalculado ao gravar. Se já houver valores recebidos, são redistribuídos pelas primeiras prestações do novo mapa (os movimentos do banco não mudam).</div>
+            <div id="edit-emp-produto-wrap" style="display:none"><label for="edit-emp-produto">Produto</label><input id="edit-emp-produto"></div>
             <label for="edit-emp-valor">Valor</label>
             <input id="edit-emp-valor" type="number" step="1">
             <div class="row2">
@@ -1026,6 +1037,108 @@
       </section>
   </div>
 
+  <!-- ==================== VISTA: SHOWROOM ==================== -->
+  <div class="view" id="view-showroom">
+    <section class="panel" id="showroom-sql" style="display:none">
+      <h2>Showroom</h2>
+      <div class="empty" style="color:var(--warn);">Falta preparar a base de dados para o showroom. Abra o SQL Editor do Supabase, cole o texto abaixo e execute (uma única vez):</div>
+      <textarea id="showroom-sql-texto" readonly rows="14" style="font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+      <div class="btn-row"><button type="button" class="ghost" onclick="copiarSqlShowroom()">Copiar SQL</button><button type="button" onclick="carregarShowroom()">Já executei — verificar</button></div>
+    </section>
+    <section class="panel" id="showroom-main">
+      <h2>Showroom — vendas de produtos a prestações</h2>
+      <div class="empty" style="padding:0 0 10px;">Funciona como um empréstimo: o mesmo cálculo de juro e de prestações, os mesmos estados e a mesma regra de pagamento parcial. No ficheiro de descontos do mês, o valor do showroom aparece numa coluna própria.</div>
+      <div class="toolbar" style="margin-top:0;">
+        <div class="fm-wrap gestao-only">
+          <button type="button" class="fm-btn" onclick="toggleFloatMenu(this)">Nova venda</button>
+          <div class="float-menu wide">
+            <h2>Nova venda de showroom</h2>
+            <label for="sh-nif">NIF</label>
+            <div class="inline-field">
+              <input id="sh-nif" placeholder="123456789" onkeydown="if(event.key==='Enter')procurarPessoaShowroom()">
+              <button type="button" class="ghost" onclick="procurarPessoaShowroom()">Procurar</button>
+            </div>
+            <div id="sh-pessoa" class="empty" style="padding:4px 0 8px;"></div>
+            <label for="sh-produto">Produto</label>
+            <input id="sh-produto" placeholder="Ex.: Televisor 55 polegadas">
+            <label for="sh-valor">Valor do produto</label>
+            <input id="sh-valor" type="number" step="1" placeholder="25000">
+            <div class="row2">
+              <div><label for="sh-taxa">Taxa de juro (%)</label><input id="sh-taxa" type="number" step="0.01" placeholder="12.5"></div>
+              <div><label for="sh-prestacoes">Nº de prestações</label><input id="sh-prestacoes" type="number" placeholder="12"></div>
+            </div>
+            <div class="row2">
+              <div>
+                <label for="sh-periodicidade">Periodicidade</label>
+                <select id="sh-periodicidade"><option value="MENSAL">Mensal</option><option value="TRIMESTRAL">Trimestral</option><option value="ANUAL">Anual</option></select>
+              </div>
+              <div><label for="sh-data">Data de início</label><input id="sh-data" type="date"></div>
+            </div>
+            <div class="btn-row"><button data-fm-autoclose onclick="registarVendaShowroom()">Registar venda e gerar mapa</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="kpis kpis-showroom" id="showroom-kpis"></div>
+      <div class="filter-row" style="margin-top:12px;">
+        <div><label for="sh-f-estado">Estado</label>
+          <select id="sh-f-estado" onchange="renderShowroom()"><option value="">Todos</option><option value="PENDENTE">Pendente</option><option value="ATRASADO">Atrasado</option><option value="PAGO">Pago</option><option value="LIQUIDADO">Liquidado</option><option value="ANULADO">Anulado</option></select></div>
+        <div><label for="sh-f-texto">Procurar</label><input id="sh-f-texto" placeholder="nome, NIF ou produto" oninput="renderShowroom()"></div>
+        <div><label for="sh-f-de">Início de</label><input id="sh-f-de" type="date" onchange="renderShowroom()"></div>
+        <div><label for="sh-f-ate">Início até</label><input id="sh-f-ate" type="date" onchange="renderShowroom()"></div>
+        <button class="ghost" onclick="['sh-f-estado','sh-f-texto','sh-f-de','sh-f-ate'].forEach(i => document.getElementById(i).value = ''); renderShowroom()">Limpar filtros</button>
+      </div>
+      <div id="showroom-lista" style="margin-top:12px;"></div>
+    </section>
+  </div>
+
+  <!-- ==================== VISTA: REGISTO DE ALTERAÇÕES ==================== -->
+  <div class="view" id="view-registo">
+    <section class="panel gestao-only">
+      <h2>Registo de alterações</h2>
+      <div class="empty" style="padding:0 0 10px;">Quem criou, alterou ou apagou o quê, e quando. O registo é feito pela própria base de dados e não pode ser alterado nem apagado a partir do programa.</div>
+      <div id="registo-sql" style="display:none;margin-bottom:12px;">
+        <div class="empty" style="color:var(--warn);">O registo ainda não está ativo. Abra o SQL Editor do Supabase, cole o texto abaixo e execute (uma única vez):</div>
+        <textarea id="registo-sql-texto" readonly rows="12" style="font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+        <div class="btn-row"><button type="button" class="ghost" onclick="copiarSqlRegisto()">Copiar SQL</button></div>
+      </div>
+      <div class="filter-row" id="registo-filtros">
+        <div>
+          <label for="reg-tabela">O quê</label>
+          <select id="reg-tabela" onchange="carregarRegisto(false)">
+            <option value="">Tudo</option>
+            <option value="emprestimos">Empréstimos</option>
+            <option value="mapa_amortizacao">Pagamentos (prestações)</option>
+            <option value="pessoas">Pessoas</option>
+            <option value="movimentos_banco">Banco</option>
+            <option value="cheques">Cheques</option>
+            <option value="documentos">Documentos</option>
+            <option value="perfis">Utilizadores</option>
+          </select>
+        </div>
+        <div>
+          <label for="reg-operacao">Ação</label>
+          <select id="reg-operacao" onchange="carregarRegisto(false)">
+            <option value="">Todas</option>
+            <option value="INSERT">Criado</option>
+            <option value="UPDATE">Alterado</option>
+            <option value="DELETE">Apagado</option>
+          </select>
+        </div>
+        <div><label for="reg-utilizador">Quem</label><input id="reg-utilizador" placeholder="nome" onchange="carregarRegisto(false)"></div>
+        <div><label for="reg-emp">Empréstimo nº</label><input id="reg-emp" inputmode="numeric" placeholder="nº" onchange="carregarRegisto(false)"></div>
+        <div><label for="reg-nif">NIF</label><input id="reg-nif" inputmode="numeric" placeholder="NIF" onchange="carregarRegisto(false)"></div>
+        <div><label for="reg-de">De</label><input id="reg-de" type="date" onchange="carregarRegisto(false)"></div>
+        <div><label for="reg-ate">Até</label><input id="reg-ate" type="date" onchange="carregarRegisto(false)"></div>
+        <button class="ghost" onclick="limparFiltrosRegisto()">Limpar filtros</button>
+        <div class="filter-actions">
+          <button class="btn-icon btn-excel" onclick="exportarRegistoExcel()" title="Exportar para Excel" aria-label="Exportar para Excel"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2.5H6a1 1 0 0 0-1 1v17a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7.5z"/><path d="M14 2.5v5h5"/><path d="M9 11.5l5 6M14 11.5l-5 6"/></svg></button>
+        </div>
+      </div>
+      <div id="registo-lista" style="margin-top:12px;"></div>
+      <div class="btn-row"><button id="registo-mais" class="ghost" style="display:none" onclick="carregarRegisto(true)">Carregar mais</button></div>
+    </section>
+  </div>
+
   <!-- ==================== VISTA: DASHBOARD ==================== -->
   <div class="view" id="view-resumo">
     <section class="panel">
@@ -1365,6 +1478,8 @@ function mudarVista(nome){
   if (nome === 'banco') carregarBanco();
   if (nome === 'cheques') carregarCheques();
   if (nome === 'utilizadores'){ carregarUtilizadores(); mostrarUltimaCopia(); }
+  if (nome === 'registo') carregarRegisto(false);
+  if (nome === 'showroom') carregarShowroom();
   if (nome === 'resumo') carregarResumoMensal();
 }
 
@@ -1991,7 +2106,7 @@ async function lembreteWhatsAppPessoa(){
   if (!pessoaAtual.contacto){ log('Esta pessoa não tem contacto registado. Use "Editar" para acrescentar o número.', true); return; }
   const re = await sb.from('emprestimos').select('*').eq('nif', pessoaAtual.nif);
   if (re.error){ log('Erro: ' + re.error.message, true); return; }
-  const emps = re.data || [];
+  const emps = soEmprestimos(re.data);
   let linhas = [];
   try { linhas = emps.length ? await buscarPorLotes('mapa_amortizacao', 'emprestimo_id', emps.map(e => e.id), '*') : []; }
   catch (e){ log('Erro: ' + e.message, true); return; }
@@ -2120,6 +2235,374 @@ async function removerDocumento(d){
   carregarDocumentos();
 }
 
+/* ---------- showroom: lista e nova venda ---------- */
+const SQL_SHOWROOM = `-- =====================================================================================
+--  SHOWROOM — vendas de produtos a prestações (mesmas regras dos empréstimos)
+--
+--  As vendas do showroom ficam na mesma tabela dos empréstimos, com duas colunas novas:
+--    tipo    ('EMPRESTIMO' por omissão, ou 'SHOWROOM')
+--    produto (descrição do produto vendido)
+--  Os empréstimos que já existem continuam como estão (ficam com tipo = 'EMPRESTIMO').
+--
+--  COMO USAR: Supabase > SQL Editor > cole tudo > Run (uma única vez; pode repetir sem problema).
+-- =====================================================================================
+alter table public.emprestimos add column if not exists tipo text not null default 'EMPRESTIMO';
+alter table public.emprestimos add column if not exists produto text;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'emprestimos_tipo_check') then
+    alter table public.emprestimos add constraint emprestimos_tipo_check check (tipo in ('EMPRESTIMO', 'SHOWROOM'));
+  end if;
+end $$;
+
+create index if not exists emprestimos_tipo_idx on public.emprestimos (tipo);
+`;
+let showroomCache = [], shPessoa = null;
+function copiarSqlShowroom(){
+  const t = document.getElementById('showroom-sql-texto'); t.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(SQL_SHOWROOM) : Promise.reject()).then(() => log('SQL copiado.'), () => { try { document.execCommand('copy'); log('SQL copiado.'); } catch (e) {} });
+}
+async function carregarShowroom(){
+  if (!requireConn()) return;
+  const ok = await verificarShowroom(true);
+  document.getElementById('showroom-sql').style.display = ok ? 'none' : 'block';
+  document.getElementById('showroom-main').style.display = ok ? '' : 'none';
+  if (!ok){ document.getElementById('showroom-sql-texto').value = SQL_SHOWROOM; return; }
+  const r = await sb.from('emprestimos').select('*, pessoas(nome)').eq('tipo', 'SHOWROOM').order('data_inicio', { ascending: false });
+  if (r.error){ log('Erro: ' + r.error.message, true); return; }
+  const emps = r.data || [];
+  let linhas = [];
+  try { linhas = emps.length ? await buscarPorLotes('mapa_amortizacao', 'emprestimo_id', emps.map(e => e.id), '*') : []; }
+  catch (e){ log('Erro: ' + e.message, true); return; }
+  const porEmp = new Map();
+  linhas.forEach(l => { if (!porEmp.has(l.emprestimo_id)) porEmp.set(l.emprestimo_id, []); porEmp.get(l.emprestimo_id).push(l); });
+  showroomCache = emps.map(emp => {
+    const ls = porEmp.get(emp.id) || [];
+    const estado = estadoFinalEmprestimo(emp, ls);
+    const fechado = estado === 'ANULADO' || estado === 'LIQUIDADO';
+    const pago = arred(ls.reduce((s, l) => s + valorPagoPrestacao(l), 0));
+    const total = ls.reduce((s, l) => s + Number(l.valor_prestacao), 0);
+    return { emp, nome: emp.pessoas ? emp.pessoas.nome : '', estado, pago, total, saldo: fechado ? 0 : arred(Math.max(0, total - pago)),
+      nAtras: fechado ? 0 : ls.filter(l => estadoPrestacao(l) === 'ATRASADO').length };
+  });
+  renderShowroom();
+}
+function renderShowroom(){
+  const v = id => document.getElementById(id).value.trim();
+  const validas = showroomCache.filter(x => x.estado !== 'ANULADO');
+  const soma = f => validas.reduce((s, x) => s + f(x), 0);
+  const cartoes = [['Vendas', String(validas.length)], ['Total vendido', fmt(soma(x => Number(x.emp.valor_emprestimo)))], ['Total a receber (com juros)', fmt(soma(x => x.total))],
+    ['Recebido', fmt(soma(x => x.pago))], ['Em dívida', fmt(soma(x => x.saldo))], ['Prestações em atraso', String(soma(x => x.nAtras))]];
+  document.getElementById('showroom-kpis').innerHTML = cartoes.map(c => '<div class="kpi"><div class="k-label">' + dashEsc(c[0]) + '</div><div class="k-value">' + dashEsc(c[1]) + '</div></div>').join('');
+  const texto = v('sh-f-texto').toLowerCase();
+  const filtradas = showroomCache.filter(x => {
+    if (v('sh-f-estado') && x.estado !== v('sh-f-estado')) return false;
+    if (v('sh-f-de') && x.emp.data_inicio < v('sh-f-de')) return false;
+    if (v('sh-f-ate') && x.emp.data_inicio > v('sh-f-ate')) return false;
+    if (texto && !((x.nome || '') + ' ' + x.emp.nif + ' ' + (x.emp.produto || '')).toLowerCase().includes(texto)) return false;
+    return true;
+  });
+  const box = document.getElementById('showroom-lista');
+  if (!filtradas.length){ box.innerHTML = '<div class="empty">' + (showroomCache.length ? 'Não há vendas com estes filtros.' : 'Ainda não há vendas de showroom.') + '</div>'; return; }
+  const tab = document.createElement('table');
+  tab.innerHTML = '<thead><tr><th>Início</th><th>NIF</th><th>Pessoa</th><th>Produto</th><th class="num">Valor</th><th class="num">Taxa</th><th class="num">Prest.</th><th class="num">Pago</th><th class="num">Em dívida</th><th>Estado</th><th></th></tr></thead>';
+  const tb = document.createElement('tbody');
+  filtradas.forEach(x => {
+    const tr = document.createElement('tr'); tr.className = 'loan-row';
+    tr.innerHTML = '<td></td><td></td><td></td><td style="white-space:normal;"></td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td><td><span class="badge"></span></td><td class="acao-pdf"></td>';
+    const c = tr.children;
+    c[0].textContent = x.emp.data_inicio; c[1].textContent = x.emp.nif; c[2].textContent = x.nome; c[3].textContent = x.emp.produto || '';
+    c[4].textContent = fmt(x.emp.valor_emprestimo); c[5].textContent = x.emp.taxa_juro_anual + '%'; c[6].textContent = x.emp.numero_prestacoes;
+    c[7].textContent = fmt(x.pago); c[8].textContent = fmt(x.saldo);
+    const bd = c[9].querySelector('.badge'); bd.className = 'badge ' + badgeClasseEmprestimo(x.estado); bd.textContent = x.estado;
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'small ghost'; btn.title = 'Extrato em PDF'; btn.setAttribute('aria-label', 'Extrato em PDF'); btn.innerHTML = ICONE_PDF;
+    btn.onclick = ev => { ev.stopPropagation(); extratoEmprestimo(x.emp); };
+    c[10].appendChild(btn);
+    tr.onclick = () => abrirShowroom(x.emp);
+    tb.appendChild(tr);
+  });
+  tab.appendChild(tb); box.innerHTML = ''; box.appendChild(tab);
+}
+// abre a venda no mapa de amortização (pagamentos, editar, anular, liquidar, documentos: tudo como nos empréstimos)
+async function abrirShowroom(emp){
+  document.getElementById('nif').value = emp.nif;
+  mudarVista('emprestimos');
+  await procurarPessoa();
+  verMapa(emp);
+}
+async function procurarPessoaShowroom(){
+  const nif = document.getElementById('sh-nif').value.trim();
+  const el = document.getElementById('sh-pessoa');
+  shPessoa = null;
+  if (!nif){ el.textContent = ''; return; }
+  const { data, error } = await sb.from('pessoas').select('*').eq('nif', nif).maybeSingle();
+  if (error){ el.textContent = 'Erro: ' + error.message; return; }
+  if (!data){ el.style.color = 'var(--warn)'; el.textContent = 'Pessoa não registada. Registe-a primeiro na aba Empréstimos (botão Procurar pessoa).'; return; }
+  shPessoa = data; el.style.color = 'var(--ok)'; el.textContent = data.nome;
+}
+async function registarVendaShowroom(){
+  if (!requireGestao()) return;
+  if (!await verificarShowroom()){ log('Falta preparar a base de dados (veja o texto SQL no topo do Showroom).', true); return; }
+  if (!shPessoa || shPessoa.nif !== document.getElementById('sh-nif').value.trim()) await procurarPessoaShowroom();
+  if (!shPessoa){ log('Procure uma pessoa registada pelo NIF.', true); return; }
+  const produto = document.getElementById('sh-produto').value.trim();
+  const valor = Math.round(parseFloat(document.getElementById('sh-valor').value));
+  const taxa = parseFloat(document.getElementById('sh-taxa').value);
+  const nPrestacoes = parseInt(document.getElementById('sh-prestacoes').value, 10);
+  const periodicidade = document.getElementById('sh-periodicidade').value;
+  const dataInicio = document.getElementById('sh-data').value;
+  if (!produto || !valor || !nPrestacoes || !dataInicio || isNaN(taxa)){ log('Preencha produto, valor, taxa, prestações e data de início.', true); return; }
+
+  const { data: emp, error: errEmp } = await sb.from('emprestimos').insert({
+    nif: shPessoa.nif, valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio,
+    tipo: 'SHOWROOM', produto
+  }).select().single();
+  if (errEmp){ log('Erro ao registar a venda: ' + errEmp.message, true); return; }
+  const linhas = gerarLinhasMapa(valor, taxa, nPrestacoes, dataInicio, periodicidade).map(l => ({ ...l, emprestimo_id: emp.id }));
+  const { error: errMapa } = await sb.from('mapa_amortizacao').insert(linhas);
+  if (errMapa){ await sb.from('emprestimos').delete().eq('id', emp.id); log('Não foi possível gerar o mapa: ' + errMapa.message + '. A venda não foi registada.', true); return; }   // não deixa venda sem mapa
+  log('Venda registada e mapa gerado (' + nPrestacoes + ' prestações).');
+  ['sh-produto', 'sh-valor', 'sh-taxa', 'sh-prestacoes', 'sh-data'].forEach(id => { document.getElementById(id).value = ''; });
+  carregarShowroom();
+}
+
+/* ---------- registo de alterações (auditoria) ---------- */
+const SQL_REGISTO = `-- =====================================================================================
+--  REGISTO DE ALTERAÇÕES (auditoria) — Livro de Empréstimos
+--
+--  Guarda QUEM criou, alterou ou apagou o quê, e QUANDO, nas tabelas: pessoas, emprestimos, mapa_amortizacao
+--  (só os pagamentos), movimentos_banco, cheques, documentos e perfis.
+--
+--  O registo é feito pela própria base de dados (gatilhos), por isso:
+--    * não depende do programa e não pode ser contornado por ele;
+--    * ninguém o consegue alterar ou apagar a partir do programa; só a gestão o consegue ler.
+--
+--  COMO USAR: Supabase > SQL Editor > cole tudo > Run (uma única vez). Pode voltar a executar sem problema.
+--  Nota: este texto não foi testado contra a sua base de dados. Se aparecer um erro, diga-me a mensagem.
+-- =====================================================================================
+
+create table if not exists public.registo_alteracoes (
+  id bigint generated always as identity primary key,
+  quando timestamptz not null default now(),
+  utilizador_id uuid,
+  utilizador text,
+  tabela text not null,
+  operacao text not null check (operacao in ('INSERT', 'UPDATE', 'DELETE')),
+  registo_id text,
+  emprestimo_id text,
+  nif text,
+  contexto jsonb,
+  antes jsonb,
+  depois jsonb,
+  campos text[]
+);
+
+create index if not exists registo_alteracoes_quando_idx on public.registo_alteracoes (quando desc);
+create index if not exists registo_alteracoes_emprestimo_idx on public.registo_alteracoes (emprestimo_id);
+create index if not exists registo_alteracoes_nif_idx on public.registo_alteracoes (nif);
+
+-- quem tem perfil "gestao" (a mesma função do script de segurança)
+create or replace function public.e_gestao() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.perfis where user_id = auth.uid() and papel = 'gestao');
+$$;
+revoke all on function public.e_gestao() from public, anon;
+grant execute on function public.e_gestao() to authenticated;
+
+-- só a gestão lê; ninguém escreve diretamente (só os gatilhos, que correm com permissões da base de dados)
+alter table public.registo_alteracoes enable row level security;
+drop policy if exists registo_ler on public.registo_alteracoes;
+create policy registo_ler on public.registo_alteracoes for select to authenticated using (public.e_gestao());
+revoke all on public.registo_alteracoes from anon, authenticated;
+grant select on public.registo_alteracoes to authenticated;
+
+-- função chamada pelos gatilhos
+create or replace function public.registar_alteracao() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row jsonb; v_antes jsonb; v_depois jsonb; v_campos text[]; v_a2 jsonb; v_d2 jsonb;
+  v_emp text; v_nif text; v_id text; v_ctx jsonb;
+begin
+  -- nas prestações só interessam os pagamentos (as prestações são recalculadas em bloco ao editar um empréstimo)
+  if TG_TABLE_NAME = 'mapa_amortizacao' and TG_OP <> 'UPDATE' then return null; end if;
+
+  if TG_OP = 'DELETE' then
+    v_row := to_jsonb(OLD); v_antes := v_row; v_depois := null;
+  elsif TG_OP = 'INSERT' then
+    v_row := to_jsonb(NEW); v_antes := null; v_depois := v_row;
+  else
+    v_row := to_jsonb(NEW); v_antes := to_jsonb(OLD); v_depois := v_row;
+    select array_agg(k order by k) into v_campos
+      from jsonb_object_keys(v_depois) as k
+      where (v_depois -> k) is distinct from (v_antes -> k) and k <> 'updated_at';
+    if v_campos is null then return null; end if;                          -- nada mudou
+    if TG_TABLE_NAME = 'mapa_amortizacao' and not (v_campos && array['valor_pago', 'estado', 'data_pagamento']) then
+      return null;                                                          -- só pagamentos
+    end if;
+    select jsonb_object_agg(c, v_antes -> c), jsonb_object_agg(c, v_depois -> c) into v_a2, v_d2
+      from unnest(v_campos) as c;
+    v_antes := v_a2; v_depois := v_d2;                                      -- guarda só os campos que mudaram
+  end if;
+
+  v_id := coalesce(v_row ->> 'id', v_row ->> 'nif', v_row ->> 'user_id');
+  v_emp := case TG_TABLE_NAME
+    when 'emprestimos' then v_row ->> 'id'
+    when 'mapa_amortizacao' then v_row ->> 'emprestimo_id'
+    when 'documentos' then v_row ->> 'emprestimo_id'
+    else null end;
+  v_nif := case when TG_TABLE_NAME in ('emprestimos', 'pessoas') then v_row ->> 'nif' else null end;
+  v_ctx := case TG_TABLE_NAME
+    when 'mapa_amortizacao' then jsonb_build_object('numero_prestacao', v_row ->> 'numero_prestacao')
+    when 'movimentos_banco' then jsonb_build_object('tipo', v_row ->> 'tipo', 'descricao', v_row ->> 'descricao')
+    when 'cheques' then jsonb_build_object('numero_cheque', v_row ->> 'numero_cheque', 'beneficiario', v_row ->> 'beneficiario')
+    when 'pessoas' then jsonb_build_object('nome', v_row ->> 'nome')
+    when 'documentos' then jsonb_build_object('tipo', v_row ->> 'tipo', 'descricao', v_row ->> 'descricao')
+    when 'perfis' then jsonb_build_object('email', v_row ->> 'email')
+    else '{}'::jsonb end;
+
+  insert into public.registo_alteracoes (utilizador_id, utilizador, tabela, operacao, registo_id, emprestimo_id, nif, contexto, antes, depois, campos)
+  values (auth.uid(), coalesce(auth.jwt() ->> 'email', auth.jwt() ->> 'role', 'sistema'), TG_TABLE_NAME, TG_OP, v_id, v_emp, v_nif, v_ctx, v_antes, v_depois, v_campos);
+  return null;
+end;
+$$;
+
+-- liga o gatilho às tabelas (só às que existirem)
+do $$
+declare t text;
+begin
+  foreach t in array array['pessoas', 'emprestimos', 'mapa_amortizacao', 'movimentos_banco', 'cheques', 'documentos', 'perfis']
+  loop
+    if to_regclass('public.' || t) is not null then
+      execute format('drop trigger if exists registar_alteracao on public.%I', t);
+      execute format('create trigger registar_alteracao after insert or update or delete on public.%I for each row execute function public.registar_alteracao()', t);
+    end if;
+  end loop;
+end $$;
+
+-- Teste rápido (opcional): depois de alterar algo no programa, veja os últimos registos:
+-- select quando, utilizador, tabela, operacao, campos from public.registo_alteracoes order by id desc limit 20;
+`;
+const REG_POR_PAGINA = 100;
+let regPagina = 0, regLinhas = [], regPedido = 0;
+const TABELAS_REG = { pessoas: 'Pessoas', emprestimos: 'Empréstimos', mapa_amortizacao: 'Pagamentos', movimentos_banco: 'Banco', cheques: 'Cheques', documentos: 'Documentos', perfis: 'Utilizadores' };
+const OPERACOES_REG = { INSERT: 'Criado', UPDATE: 'Alterado', DELETE: 'Apagado' };
+const ROTULOS_CAMPO = { valor_emprestimo: 'valor', taxa_juro_anual: 'taxa de juro', numero_prestacoes: 'nº de prestações', periodicidade: 'periodicidade', data_inicio: 'data de início',
+  estado: 'estado', nif: 'NIF', nome: 'nome', contacto: 'contacto', limite_credito: 'limite de crédito', valor_pago: 'valor pago', data_pagamento: 'data de pagamento',
+  data_vencimento: 'vencimento', valor_prestacao: 'prestação', valor_juro: 'juro', valor_capital: 'capital', capital_em_divida: 'capital em dívida', numero_prestacao: 'nº da prestação',
+  tipo: 'tipo', valor: 'valor', data: 'data', descricao: 'descrição', numero_cheque: 'nº do cheque', beneficiario: 'beneficiário', data_emissao: 'data de emissão', papel: 'perfil', url: 'link',
+  email: 'utilizador', emprestimo_id: 'empréstimo', user_id: 'conta' };
+const CAMPOS_DINHEIRO = ['valor_emprestimo', 'valor', 'valor_pago', 'limite_credito', 'valor_prestacao', 'valor_juro', 'valor_capital', 'capital_em_divida'];
+const regValor = (campo, v) => v === null || v === undefined || v === '' ? '—' : (typeof v === 'number' && CAMPOS_DINHEIRO.includes(campo)) ? fmt(v) : String(v);
+const regQuando = iso => { const d = new Date(iso); const p = n => String(n).padStart(2, '0'); return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+
+function descreverRegisto(r){
+  const c = r.contexto || {}, A = r.antes || {}, D = r.depois || {}, op = r.operacao, campos = r.campos || [];
+  const verbo = op === 'INSERT' ? 'registado' : op === 'DELETE' ? 'apagado' : 'alterado';
+  switch (r.tabela){
+    case 'emprestimos': {
+      const n = 'Empréstimo nº ' + r.emprestimo_id;
+      if (op === 'INSERT') return n + ' criado — NIF ' + regValor('nif', D.nif) + ', ' + regValor('valor_emprestimo', D.valor_emprestimo) + ' em ' + regValor('', D.numero_prestacoes) + ' prestações';
+      if (op === 'DELETE') return n + ' apagado — NIF ' + regValor('nif', A.nif) + ', ' + regValor('valor_emprestimo', A.valor_emprestimo);
+      if (campos.includes('estado')) return n + ': estado ' + regValor('', A.estado) + ' → ' + regValor('', D.estado);
+      return n + ' alterado: ' + campos.map(k => (ROTULOS_CAMPO[k] || k)).join(', ');
+    }
+    case 'pessoas': return 'Pessoa ' + (c.nome || '') + ' (NIF ' + regValor('', r.nif) + ') ' + verbo + (op === 'UPDATE' ? ': ' + campos.map(k => ROTULOS_CAMPO[k] || k).join(', ') : '');
+    case 'mapa_amortizacao': {
+      const pre = 'Prestação nº ' + regValor('', c.numero_prestacao) + ' do empréstimo ' + r.emprestimo_id + ': ';
+      if (campos.includes('valor_pago')) return pre + 'valor pago ' + regValor('valor_pago', A.valor_pago ?? 0) + ' → ' + regValor('valor_pago', D.valor_pago) + (campos.includes('estado') ? ' (' + regValor('', A.estado) + ' → ' + regValor('', D.estado) + ')' : '');
+      if (campos.includes('estado')) return pre + 'estado ' + regValor('', A.estado) + ' → ' + regValor('', D.estado);
+      return pre + 'pagamento alterado';
+    }
+    case 'movimentos_banco': return 'Movimento do banco ' + verbo + (c.tipo ? ' — ' + c.tipo : '') + (c.descricao ? ': ' + c.descricao : '');
+    case 'cheques': return 'Cheque nº ' + (c.numero_cheque || '') + (c.beneficiario ? ' (' + c.beneficiario + ')' : '') + ' ' + verbo + (op === 'UPDATE' && campos.includes('estado') ? ': estado ' + regValor('', A.estado) + ' → ' + regValor('', D.estado) : '');
+    case 'documentos': return 'Documento «' + (c.tipo || '') + '»' + (c.descricao ? ' (' + c.descricao + ')' : '') + ' ' + (op === 'INSERT' ? 'adicionado' : op === 'DELETE' ? 'removido' : 'alterado') + ' no empréstimo ' + regValor('', r.emprestimo_id);
+    case 'perfis': {
+      const quem = nomeVisivel(c.email || '') || regValor('', r.registo_id);
+      return op === 'UPDATE' && campos.includes('papel') ? 'Utilizador ' + quem + ': perfil ' + regValor('', A.papel) + ' → ' + regValor('', D.papel)
+        : op === 'INSERT' ? 'Utilizador ' + quem + ' criado como ' + regValor('', D.papel) : 'Utilizador ' + quem + ' ' + verbo;
+    }
+    default: return (TABELAS_REG[r.tabela] || r.tabela) + ' ' + verbo;
+  }
+}
+function detalheRegisto(r){
+  const A = r.antes || {}, D = r.depois || {};
+  if (r.operacao === 'UPDATE') return (r.campos || []).map(k => (ROTULOS_CAMPO[k] || k) + ': ' + regValor(k, A[k]) + ' → ' + regValor(k, D[k])).join('\n');
+  const o = r.operacao === 'INSERT' ? D : A;
+  return Object.keys(o || {}).filter(k => o[k] !== null && o[k] !== '').map(k => (ROTULOS_CAMPO[k] || k) + ': ' + regValor(k, o[k])).join('\n');
+}
+function copiarSqlRegisto(){
+  const t = document.getElementById('registo-sql-texto'); t.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(SQL_REGISTO) : Promise.reject()).then(() => log('SQL copiado.'), () => { try { document.execCommand('copy'); log('SQL copiado.'); } catch (e) {} });
+}
+function limparFiltrosRegisto(carregar = true){
+  ['reg-tabela', 'reg-operacao', 'reg-utilizador', 'reg-emp', 'reg-nif', 'reg-de', 'reg-ate'].forEach(id => { document.getElementById(id).value = ''; });
+  if (carregar) carregarRegisto(false);
+}
+function verHistoricoEmprestimo(){
+  if (!emprestimoAtual) return;
+  const id = emprestimoAtual.id;
+  limparFiltrosRegisto(false);
+  document.getElementById('reg-emp').value = id;
+  mudarVista('registo');                       // já carrega o registo com o filtro do empréstimo
+}
+async function carregarRegisto(mais){
+  if (!requireConn()) return;
+  if (!mais){ regPagina = 0; regLinhas = []; } else regPagina++;
+  const meuPedido = ++regPedido;
+  const v = id => document.getElementById(id).value.trim();
+  let q = sb.from('registo_alteracoes').select('*').order('id', { ascending: false });
+  if (v('reg-tabela')) q = q.eq('tabela', v('reg-tabela'));
+  if (v('reg-operacao')) q = q.eq('operacao', v('reg-operacao'));
+  if (v('reg-utilizador')) q = q.ilike('utilizador', '%' + slugUtilizador(v('reg-utilizador')) + '%');
+  if (v('reg-emp')) q = q.eq('emprestimo_id', v('reg-emp'));
+  if (v('reg-nif')) q = q.eq('nif', v('reg-nif'));
+  if (v('reg-de')) q = q.gte('quando', v('reg-de') + 'T00:00:00');
+  if (v('reg-ate')){ const d = new Date(v('reg-ate') + 'T00:00:00'); d.setDate(d.getDate() + 1); q = q.lt('quando', d.toISOString().slice(0, 10) + 'T00:00:00'); }
+  const r = await q.range(regPagina * REG_POR_PAGINA, regPagina * REG_POR_PAGINA + REG_POR_PAGINA - 1);
+  if (meuPedido !== regPedido) return;          // chegou depois de um pedido mais recente: ignora
+  const box = document.getElementById('registo-lista');
+  if (r.error){
+    if (tabelaEmFalta(r.error)){
+      document.getElementById('registo-sql-texto').value = SQL_REGISTO;
+      document.getElementById('registo-sql').style.display = 'block'; document.getElementById('registo-filtros').style.display = 'none';
+      box.innerHTML = ''; document.getElementById('registo-mais').style.display = 'none';
+    } else log('Erro no registo: ' + r.error.message, true);
+    return;
+  }
+  document.getElementById('registo-sql').style.display = 'none'; document.getElementById('registo-filtros').style.display = '';
+  regLinhas = regLinhas.concat(r.data || []);
+  document.getElementById('registo-mais').style.display = (r.data || []).length === REG_POR_PAGINA ? '' : 'none';
+  if (!regLinhas.length){ box.innerHTML = '<div class="empty">Não há registos com estes filtros.</div>'; return; }
+  const tab = document.createElement('table');
+  tab.innerHTML = '<thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>O quê</th></tr></thead>';
+  const tb = document.createElement('tbody');
+  regLinhas.forEach(x => {
+    const tr = document.createElement('tr'); tr.className = 'dash-linha';
+    const cor = x.operacao === 'DELETE' ? 'var(--danger)' : x.operacao === 'INSERT' ? 'var(--ok)' : 'var(--warn)';
+    tr.innerHTML = '<td></td><td></td><td style="font-weight:700;"></td><td style="white-space:normal;min-width:260px;"></td>';
+    tr.children[0].textContent = regQuando(x.quando);
+    tr.children[1].textContent = nomeVisivel(x.utilizador || '') || x.utilizador || 'sistema';
+    tr.children[2].textContent = OPERACOES_REG[x.operacao] || x.operacao; tr.children[2].style.color = cor;
+    tr.children[3].textContent = descreverRegisto(x);
+    const det = document.createElement('tr'); det.style.display = 'none';
+    const td = document.createElement('td'); td.colSpan = 4; td.style.whiteSpace = 'pre-line'; td.style.background = 'var(--card-2)'; td.style.fontSize = '12.5px';
+    td.textContent = detalheRegisto(x) || '(sem detalhe)'; det.appendChild(td);
+    tr.onclick = () => { det.style.display = det.style.display === 'none' ? '' : 'none'; };
+    tb.append(tr, det);
+  });
+  tab.appendChild(tb); box.innerHTML = ''; box.appendChild(tab);
+}
+function exportarRegistoExcel(){
+  if (typeof XLSX === 'undefined'){ log('A biblioteca de Excel não carregou (verifique a internet).', true); return; }
+  if (!regLinhas.length){ log('Não há registos para exportar.', true); return; }
+  const linhas = regLinhas.map(x => ({ Quando: regQuando(x.quando), Quem: nomeVisivel(x.utilizador || '') || x.utilizador || 'sistema', 'O quê': TABELAS_REG[x.tabela] || x.tabela,
+    'Ação': OPERACOES_REG[x.operacao] || x.operacao, Descrição: descreverRegisto(x), Detalhe: detalheRegisto(x).replace(/\n/g, ' | '), 'Empréstimo nº': x.emprestimo_id || '', NIF: x.nif || '' }));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas), 'Registo');
+  XLSX.writeFile(wb, 'registo_alteracoes_' + hoje() + '.xlsx');
+  log('Registo exportado (' + linhas.length + ' linha(s)).');
+}
+
 /* ---------- cópia de segurança ---------- */
 async function buscarTudo(tabela, ordem){
   for (const usarOrdem of [true, false]){
@@ -2149,13 +2632,13 @@ async function exportarTudo(){
   if (typeof XLSX === 'undefined'){ log('A biblioteca de Excel não carregou (verifique a internet).', true); return; }
   const est = document.getElementById('backup-estado');
   const tabelas = [['Pessoas', 'pessoas', 'nif'], ['Empréstimos', 'emprestimos', 'id'], ['Mapa de amortização', 'mapa_amortizacao', 'id'],
-                   ['Banco', 'movimentos_banco', 'id'], ['Cheques', 'cheques', 'id'], ['Documentos', 'documentos', 'id']];
+                   ['Banco', 'movimentos_banco', 'id'], ['Cheques', 'cheques', 'id'], ['Documentos', 'documentos', 'id'], ['Registo de alterações', 'registo_alteracoes', 'id']];
   const wb = XLSX.utils.book_new(), resumo = [];
   for (const [nome, tab, ord] of tabelas){
     est.textContent = 'A ler ' + nome + '...';
     const r = await buscarTudo(tab, ord);
     if (r.error){
-      if (tab === 'documentos'){ resumo.push([nome, '(tabela ainda não criada)']); continue; }   // opcional
+      if (tab === 'documentos' || tab === 'registo_alteracoes'){ resumo.push([nome, '(tabela ainda não criada)']); continue; }   // opcionais
       est.textContent = ''; log('Erro ao ler "' + nome + '": ' + r.error.message, true); return;
     }
     XLSX.utils.book_append_sheet(wb, r.data.length ? XLSX.utils.json_to_sheet(r.data) : XLSX.utils.aoa_to_sheet([['(sem dados)']]), nome.slice(0, 31));
@@ -2182,10 +2665,11 @@ async function buscarTodasPrestacoes(){
 }
 async function carregarTodosEmprestimos(){
   if (!requireConn()) return;
-  const { data, error } = await sb.from('emprestimos')
+  const { data: dataTodos, error } = await sb.from('emprestimos')
     .select('*, pessoas(nome)')
     .order('data_inicio', { ascending: false });
   if (error){ log('Erro: ' + error.message, true); return; }
+  const data = soEmprestimos(dataTodos);
 
   const { data: prest, error: errPrest } = await buscarTodasPrestacoes();
 
@@ -2193,7 +2677,8 @@ async function carregarTodosEmprestimos(){
   const porEmprestimo = new Map();
   let pagas = 0, atrasadas = 0, porPagar = 0;
   if (!errPrest){
-    prest.forEach(p => {
+    const idsLista = new Set(data.map(e => e.id));
+    prest.filter(p => idsLista.has(p.emprestimo_id)).forEach(p => {
       if (!porEmprestimo.has(p.emprestimo_id)) porEmprestimo.set(p.emprestimo_id, []);
       porEmprestimo.get(p.emprestimo_id).push(p);
       const e = estadoPrestacao(p);
@@ -2393,7 +2878,8 @@ function gerarExtratoPdf(emp, linhas){
 
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 40;
   const emissor = (cfg && cfg.titular) ? cfg.titular : 'Livro de Empréstimos';
-  cabecalhoPdf(doc, W, M, 'EXTRATO DE EMPRÉSTIMO', 18, emissor, 'Empréstimo nº ' + emp.id, 'Emitido em ' + hoje());
+  const eShow = emp.tipo === 'SHOWROOM';
+  cabecalhoPdf(doc, W, M, eShow ? 'EXTRATO DE SHOWROOM' : 'EXTRATO DE EMPRÉSTIMO', 18, emissor, (eShow ? 'Venda nº ' : 'Empréstimo nº ') + emp.id, 'Emitido em ' + hoje());
 
   let y = 106;
   const campo = (x, rot, val) => {
@@ -2401,10 +2887,11 @@ function gerarExtratoPdf(emp, linhas){
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(28, 31, 38); doc.text(String(val), x + 108, y);
   };
   const X2 = M + 262;
-  campo(M, 'Nome', nome || '—');                                   campo(X2, 'Valor emprestado', sp(fmt(emp.valor_emprestimo)) + ' ' + moeda); y += 17;
+  campo(M, 'Nome', nome || '—');                                   campo(X2, eShow ? 'Valor do produto' : 'Valor emprestado', sp(fmt(emp.valor_emprestimo)) + ' ' + moeda); y += 17;
   campo(M, 'NIF', emp.nif);                                        campo(X2, 'Taxa de juro', emp.taxa_juro_anual + '%'); y += 17;
   campo(M, 'Data de início', emp.data_inicio);                     campo(X2, 'Prestações', emp.numero_prestacoes + (emp.periodicidade ? ' (' + String(emp.periodicidade).toLowerCase() + ')' : '')); y += 17;
   campo(M, 'Estado', estadoEmp);                                   campo(X2, 'Total a pagar', sp(fmt(totPrest)) + ' ' + moeda); y += 14;
+  if (eShow){ y += 3; campo(M, 'Produto', emp.produto || '—'); y += 14; }
 
   y += 10;
   const caixa = (x, rot, val) => {
@@ -2444,7 +2931,7 @@ async function resumoPessoaPdf(){
   if (!pessoaAtual){ log('Procura primeiro uma pessoa.', true); return; }
   const re = await sb.from('emprestimos').select('*').eq('nif', pessoaAtual.nif).order('data_inicio', { ascending: true });
   if (re.error){ log('Erro: ' + re.error.message, true); return; }
-  const emps = re.data || [];
+  const emps = soEmprestimos(re.data);
   if (!emps.length){ log('Esta pessoa ainda não tem empréstimos.', true); return; }
   let mapa;
   try { mapa = await buscarPorLotes('mapa_amortizacao', 'emprestimo_id', emps.map(e => e.id), '*'); }
@@ -2553,8 +3040,9 @@ function limparFiltrosLista(){
 }
 
 async function carregarEmprestimos(nif){
-  const { data, error } = await sb.from('emprestimos').select('*').eq('nif', nif).order('data_inicio', {ascending:false});
+  const { data: dataNif, error } = await sb.from('emprestimos').select('*').eq('nif', nif).order('data_inicio', {ascending:false});
   if (error){ log('Erro: ' + error.message, true); return; }
+  const data = soEmprestimos(dataNif);
   const ids = data.map(e => e.id);
   const porEmprestimo = new Map();
   if (ids.length){
@@ -2695,7 +3183,7 @@ async function carregarResumoMensal(){
   if (error){ log('Erro: ' + error.message, true); return; }
   const { data: prest, error: e2 } = await buscarTodasPrestacoes();
   if (e2){ log('Erro: ' + e2.message, true); return; }
-  dashCache = { emps: emps || [], prest: prest || [] };
+  dashCache = { emps: soEmprestimos(emps), prest: prest || [] };
   renderDashboard();
 }
 
@@ -2953,8 +3441,8 @@ async function criarEmprestimo(){
   if (!valor || !nPrestacoes || !dataInicio || isNaN(taxa)){ log('Preenche valor, taxa, prestações e data de início.', true); return; }
 
   if (pessoaAtual.limite_credito != null){
-    const { data: ativos } = await sb.from('emprestimos').select('valor_emprestimo').eq('nif', pessoaAtual.nif).not('estado', 'in', '(LIQUIDADO,ANULADO)');
-    const exposicaoAtual = (ativos || []).reduce((s, e) => s + Number(e.valor_emprestimo), 0);
+    const { data: ativos } = await sb.from('emprestimos').select('*').eq('nif', pessoaAtual.nif).not('estado', 'in', '(LIQUIDADO,ANULADO)');
+    const exposicaoAtual = soEmprestimos(ativos).reduce((s, e) => s + Number(e.valor_emprestimo), 0);
     const novoTotal = exposicaoAtual + valor;
     if (novoTotal > pessoaAtual.limite_credito){
       const ok = await confirmar('Ultrapassa o limite de crédito',
@@ -3193,6 +3681,9 @@ async function verMapa(emp){
   if (error){ log('Erro: ' + error.message, true); return; }
   document.getElementById('mapa-section').style.display = 'block';
   document.getElementById('docs-section').style.display = 'block';
+  const bShow = document.getElementById('mapa-showroom');
+  bShow.style.display = emp.tipo === 'SHOWROOM' ? 'block' : 'none';
+  bShow.textContent = emp.tipo === 'SHOWROOM' ? 'Showroom — produto: ' + (emp.produto || '(sem descrição)') : '';
   carregarDocumentos();
   document.querySelectorAll('#tabela-emprestimos tr.loan-row').forEach(r => r.classList.toggle('selected', r.dataset.id == emp.id));
   const pagas = data.filter(r => r.estado === 'PAGO').length;
@@ -3242,8 +3733,20 @@ function mostrarEditarEmprestimo(){
   document.getElementById('edit-emp-prestacoes').value = emprestimoAtual.numero_prestacoes;
   document.getElementById('edit-emp-periodicidade').value = emprestimoAtual.periodicidade;
   document.getElementById('edit-emp-data').value = emprestimoAtual.data_inicio;
+  document.getElementById('edit-emp-produto-wrap').style.display = emprestimoAtual.tipo === 'SHOWROOM' ? 'block' : 'none';
+  document.getElementById('edit-emp-produto').value = emprestimoAtual.produto || '';
   document.getElementById('editar-emprestimo').style.display = 'block';
 }
+
+/* ---------- showroom: vendas de produtos a prestações (na tabela dos empréstimos, com tipo = 'SHOWROOM') ---------- */
+let temShowroom = null;                                   // null = ainda não verificado
+async function verificarShowroom(forcar){
+  if (temShowroom !== null && !forcar) return temShowroom;
+  const r = await sb.from('emprestimos').select('tipo').limit(1);
+  temShowroom = !r.error;
+  return temShowroom;
+}
+const soEmprestimos = lista => (lista || []).filter(e => e.tipo !== 'SHOWROOM');   // as vendas do showroom não entram nas contas dos empréstimos
 
 let editandoEmprestimo = false;
 async function guardarEdicaoEmprestimo(){
@@ -3282,9 +3785,12 @@ async function edicaoEmprestimo(passo){
     valor_emprestimo: emprestimoAtual.valor_emprestimo, taxa_juro_anual: emprestimoAtual.taxa_juro_anual,
     numero_prestacoes: emprestimoAtual.numero_prestacoes, periodicidade: emprestimoAtual.periodicidade, data_inicio: emprestimoAtual.data_inicio
   };
+  const eShowroom = emprestimoAtual.tipo === 'SHOWROOM';
+  const produto = eShowroom ? document.getElementById('edit-emp-produto').value.trim() : null;
+  if (eShowroom) anterior.produto = emprestimoAtual.produto || null;
   passo('A guardar...');
   const { error: errUpd } = await sb.from('emprestimos').update({
-    valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio
+    valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio, ...(eShowroom ? { produto: produto || null } : {})
   }).eq('id', idEmp);
   if (errUpd){ log('Não foi possível guardar o empréstimo: ' + errUpd.message + (errUpd.details ? ' — ' + errUpd.details : '') + (errUpd.code ? ' [' + errUpd.code + ']' : ''), true); return; }
 
@@ -3362,7 +3868,7 @@ async function edicaoEmprestimo(passo){
   }
 
   log('Empréstimo atualizado e mapa recalculado.' + (restante > 0.01 ? ' Atenção: sobraram ' + fmt(restante) + ' dos valores recebidos sem prestação onde aplicar.' : ''));
-  emprestimoAtual = { ...emprestimoAtual, valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio };
+  emprestimoAtual = { ...emprestimoAtual, valor_emprestimo: valor, taxa_juro_anual: taxa, numero_prestacoes: nPrestacoes, periodicidade, data_inicio: dataInicio, ...(eShowroom ? { produto: produto || null } : {}) };
   carregarEmprestimos(pessoaAtual.nif);
   verMapa(emprestimoAtual);
 }
@@ -3780,7 +4286,7 @@ async function confirmarPagar(){
   try {
     const { data: row, error } = await sb.from('mapa_amortizacao').select('*').eq('id', pagarRow.id).single();
     if (error){ log('Erro: ' + error.message, true); return; }
-    const res = await aplicarPagamento(row, valor, dataPag, '');
+    const res = await aplicarPagamento(row, valor, dataPag, emprestimoAtual && emprestimoAtual.tipo === 'SHOWROOM' ? ' — showroom' : '');
     if (res.erro){ log(res.erro, true); return; }
     fmCloseAll();
     pagarRow = null;
@@ -3794,20 +4300,21 @@ async function confirmarPagar(){
 
 /* ---------- pagamentos por NIF ---------- */
 // devolve { erro } ou { opcoes:[{emp,row}] } (uma opção por empréstimo ativo com prestações por pagar)
-async function proximaPrestacaoPorNif(nif, empId){
-  const re = await sb.from('emprestimos').select('id, valor_emprestimo, data_inicio, estado').eq('nif', nif).order('id');
+async function proximaPrestacaoPorNif(nif, empId, tipo = 'EMPRESTIMO'){
+  const showroom = tipo === 'SHOWROOM';
+  const re = await sb.from('emprestimos').select('*').eq('nif', nif).order('id');
   if (re.error) return { erro: re.error.message };
-  const emps = re.data || [];
-  if (!emps.length) return { erro: 'Não existe nenhum empréstimo para o NIF ' + nif + '.' };
+  const emps = (re.data || []).filter(e => (e.tipo || 'EMPRESTIMO') === tipo);
+  if (!emps.length) return { erro: 'Não existe ' + (showroom ? 'nenhuma venda de showroom' : 'nenhum empréstimo') + ' para o NIF ' + nif + '.', vazio: true };
   if (empId && !emps.some(e => e.id === empId)) return { erro: 'O empréstimo ' + empId + ' não pertence ao NIF ' + nif + '.' };
   const ativos = emps.filter(e => (e.estado || 'ATIVO') === 'ATIVO' && (!empId || e.id === empId));
-  if (!ativos.length) return { erro: 'Este NIF não tem empréstimos ativos.' };
+  if (!ativos.length) return { erro: 'Este NIF não tem ' + (showroom ? 'vendas de showroom ativas' : 'empréstimos ativos') + '.', vazio: true };
   const rp = await sb.from('mapa_amortizacao').select('*').in('emprestimo_id', ativos.map(e => e.id)).neq('estado', 'PAGO').order('numero_prestacao');
   if (rp.error) return { erro: rp.error.message };
   const primeira = new Map();
   aplicarOverlay(rp.data || []).filter(r => r.estado !== 'PAGO').forEach(r => { if (!primeira.has(r.emprestimo_id)) primeira.set(r.emprestimo_id, r); });
   const opcoes = ativos.filter(e => primeira.has(e.id)).map(e => ({ emp: e, row: primeira.get(e.id) }));
-  if (!opcoes.length) return { erro: 'Este NIF não tem prestações por pagar.' };
+  if (!opcoes.length) return { erro: 'Este NIF não tem prestações por pagar.', vazio: true };
   return { opcoes };
 }
 
@@ -3891,18 +4398,20 @@ async function devidoDoMesLinha(row){
 }
 async function exportarPendentes(){
   if (!requireConn()) return;
+  const comShowroom = await verificarShowroom();
+  const incorporado = comShowroom ? 'emprestimos(id, nif, estado, tipo, pessoas(nome))' : 'emprestimos(id, nif, estado, pessoas(nome))';
   // todas as prestações por pagar (em páginas, para não ficar pelo limite de 1000 linhas)
   const pend = [];
   for (let de = 0; ; de += 1000){
     const { data, error } = await sb.from('mapa_amortizacao')
-      .select('*, emprestimos(id, nif, estado, pessoas(nome))')
+      .select('*, ' + incorporado)
       .neq('estado', 'PAGO').order('id').range(de, de + 999);
     if (error){ log('Erro: ' + error.message, true); return; }
     pend.push(...data);
     if (data.length < 1000) break;
   }
 
-  // prestações por pagar de cada empréstimo ativo, por ordem
+  // prestações por pagar de cada empréstimo (ou venda de showroom) ativo, por ordem
   const pendPorEmp = new Map();
   pend.forEach(r => {
     if (!r.emprestimos || (r.emprestimos.estado || 'ATIVO') !== 'ATIVO') return;
@@ -3911,34 +4420,35 @@ async function exportarPendentes(){
   });
   pendPorEmp.forEach(l => l.sort((a, b) => a.numero_prestacao - b.numero_prestacao));
 
-  // junta por NIF: se houver mais de um empréstimo, soma os valores.
-  // Se a próxima prestação de um empréstimo estiver parcial, entra o que falta dela + a prestação seguinte.
+  // junta por NIF, com as mesmas regras nos dois tipos: soma as prestações de cada tipo e, se a próxima prestação
+  // estiver parcial, entra o que falta dela + a prestação seguinte.
   const porNif = new Map();
   pendPorEmp.forEach(lista => {
     const r = lista[0];
     const nif = r.emprestimos.nif;
-    if (!porNif.has(nif)) porNif.set(nif, { nif, nome: r.emprestimos.pessoas ? r.emprestimos.pessoas.nome : '', ids: [], valor: 0, venc: r.data_vencimento, parcial: false });
+    const showroom = r.emprestimos.tipo === 'SHOWROOM';
+    if (!porNif.has(nif)) porNif.set(nif, { nif, nome: r.emprestimos.pessoas ? r.emprestimos.pessoas.nome : '', idsE: [], idsS: [], valor: 0, showroom: 0, venc: r.data_vencimento, parcial: false });
     const g = porNif.get(nif);
-    g.ids.push(r.id);
-    if (valorPagoPrestacao(r) > 0.004 && lista[1]){ g.ids.push(lista[1].id); g.parcial = true; }
-    g.valor += valorDevidoMes(lista);
+    const ids = showroom ? g.idsS : g.idsE;
+    ids.push(r.id);
+    if (valorPagoPrestacao(r) > 0.004 && lista[1]){ ids.push(lista[1].id); g.parcial = true; }
+    if (showroom) g.showroom += valorDevidoMes(lista); else g.valor += valorDevidoMes(lista);
     if (r.data_vencimento < g.venc) g.venc = r.data_vencimento;
   });
 
   const grupos = [...porNif.values()].sort((a, b) => a.venc < b.venc ? -1 : a.venc > b.venc ? 1 : String(a.nome).localeCompare(String(b.nome)));
-  const linhas = grupos.map(g => ({
-    'ID': g.ids.join('+'),
-    'NIF': g.nif,
-    'Nome': g.nome,
-    'Valor': arred(g.valor),
-    'Data Pagamento': '',
-    'Valor Pago': '',
-    'Obs.': g.parcial ? 'Parcial + prestação seguinte' : ''
-  }));
+  const linhas = grupos.map(g => {
+    const l = { 'ID': g.idsE.concat(g.idsS).join('+'), 'NIF': g.nif, 'Nome': g.nome, 'Valor': arred(g.valor) };
+    if (comShowroom){ l['Showroom'] = arred(g.showroom); l['Total'] = arred(g.valor + g.showroom); }
+    l['Data Pagamento'] = ''; l['Valor Pago'] = '';
+    if (comShowroom) l['Showroom Pago'] = '';
+    l['Obs.'] = g.parcial ? 'Parcial + prestação seguinte' : '';
+    return l;
+  });
   if (!linhas.length){ log('Não há prestações pendentes para exportar.'); return; }
 
   const ws = XLSX.utils.json_to_sheet(linhas);
-  ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 32 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 30 }];
+  ws['!cols'] = (comShowroom ? [12, 14, 32, 14, 14, 14, 16, 14, 14, 30] : [12, 14, 32, 14, 16, 14, 30]).map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Prestações Pendentes');
   XLSX.writeFile(wb, 'prestacoes_pendentes.xlsx');
@@ -3969,7 +4479,8 @@ async function importarPagamentosExcel(){
     id: achar(/^id prest/),
     emp: achar(/^n .*emprest/, /^emprestimo$/, /^id emprestimo$/),
     data: achar(/data.*pag/),
-    pago: achar(/valor.*pago/, /^pago$/)
+    pago: achar(/valor.*pago/, /^pago$/),
+    showPago: achar(/showroom.*pago/)
   };
   if (col.data < 0){ logEl.textContent = 'Não encontrei a coluna "Data Pagamento" no ficheiro.'; return; }
 
@@ -4015,50 +4526,86 @@ async function executarImportacao(m, hRow, col, simular, saltar, logEl){
       detalhes.push(det);
       if (!simular && saltar && saltar.has(lin)){ ignoradas++; det.estado = 'ignorada'; continue; }
       try {
-        const idPrest = col.id >= 0 ? parseInt(numeroCelula(r[col.id]), 10) : NaN;
+        // com a coluna "Showroom Pago" no ficheiro, a pessoa é sempre identificada pelo NIF (a coluna ID mistura os dois tipos)
+        const temColId = col.id >= 0 && !(col.showPago >= 0);
+        const idPrest = temColId ? parseInt(numeroCelula(r[col.id]), 10) : NaN;
         const empId = col.emp >= 0 ? parseInt(numeroCelula(r[col.emp]), 10) : NaN;
         const valorPagoCel = col.pago >= 0 ? inteiro(numeroCelula(r[col.pago])) : NaN;
+        const informado = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : null;
+        // showroom: em branco = paga o que está devido; 0 = não paga; outro valor = esse valor
+        const processarShowroom = col.showPago >= 0 && await verificarShowroom();
+        const showCel = col.showPago >= 0 ? r[col.showPago] : '';
+        const showVazio = showCel === '' || showCel === null || showCel === undefined;
+        const showInformado = showVazio ? null : inteiro(numeroCelula(showCel));
+        const respostas = [];
 
-        let row = null, multi = null;
+        // 1) parte do empréstimo
+        let row = null, multi = null, semEmprestimo = false, erroEmprestimo = '';
         if (idPrest){                                    // ID da prestação preenchido: tem prioridade
           let { data, error } = await sb.from('mapa_amortizacao').select('*').eq('id', idPrest).maybeSingle();
           if (data) data = aplicarOverlay([data])[0];
           if (error || !data){ erros.push('Linha ' + lin + ': prestação com ID ' + idPrest + ' não encontrada'); det.estado = 'erro'; det.texto = 'Prestação com ID ' + idPrest + ' não encontrada'; continue; }
           if (data.estado === 'PAGO'){ ignoradas++; det.estado = 'ignorada'; det.texto = 'A prestação já está paga'; continue; }
+          const dono = await sb.from('emprestimos').select('*').eq('id', data.emprestimo_id).maybeSingle();
+          if (dono && dono.data && dono.data.tipo === 'SHOWROOM'){ erros.push('Linha ' + lin + ': a prestação ' + idPrest + ' pertence a uma venda de showroom (use o ficheiro exportado, com a coluna "Showroom Pago")'); det.estado = 'erro'; det.texto = 'A prestação pertence ao showroom'; continue; }
           row = data;
         } else {
           if (!nif){ erros.push('Linha ' + lin + ': falta o NIF'); det.estado = 'erro'; det.texto = 'Falta o NIF'; continue; }
-          const res = await proximaPrestacaoPorNif(nif, empId || null);
-          if (res.erro){ erros.push('Linha ' + lin + ': ' + res.erro); det.estado = 'erro'; det.texto = res.erro; continue; }
-          if (res.opcoes.length > 1) multi = res.opcoes;
+          const res = await proximaPrestacaoPorNif(nif, empId || null, 'EMPRESTIMO');
+          if (res.erro){
+            if (res.vazio && processarShowroom && informado === null){ semEmprestimo = true; erroEmprestimo = res.erro; }     // só tem showroom: segue para a parte do showroom
+            else { erros.push('Linha ' + lin + ': ' + res.erro); det.estado = 'erro'; det.texto = res.erro; continue; }
+          } else if (res.opcoes.length > 1) multi = res.opcoes;
           else row = res.opcoes[0].row;
         }
-
-        const informado = (!isNaN(valorPagoCel) && valorPagoCel > 0) ? valorPagoCel : null;
-        let resp;
-        if (multi){
-          let somaDevido = 0;
-          for (const o of multi) somaDevido += await devidoDoMesLinha(o.row);
-          const devido = arred(somaDevido);
-          resp = await aplicarPagamentoPessoa(nif, multi, informado !== null ? informado : devido, dataPag, ' — importado de Excel');
-        } else {
-          resp = await aplicarPagamento(row, informado !== null ? informado : arred(await devidoDoMesLinha(row)), dataPag, ' — importado de Excel');
+        if (!semEmprestimo){
+          let respE;
+          if (multi){
+            let somaDevido = 0;
+            for (const o of multi) somaDevido += await devidoDoMesLinha(o.row);
+            respE = await aplicarPagamentoPessoa(nif, multi, informado !== null ? informado : arred(somaDevido), dataPag, ' — importado de Excel');
+          } else {
+            respE = await aplicarPagamento(row, informado !== null ? informado : arred(await devidoDoMesLinha(row)), dataPag, ' — importado de Excel');
+          }
+          if (respE.erro){ erros.push('Linha ' + lin + ': ' + respE.erro); det.estado = 'erro'; det.texto = respE.erro; continue; }
+          respE.rotulo = 'Empréstimo'; respostas.push(respE);
         }
-        if (resp.erro){ erros.push('Linha ' + lin + ': ' + resp.erro); det.estado = 'erro'; det.texto = resp.erro; continue; }
-        det.valor = arred(resp.aplicados.reduce((s, a) => s + a.valor, 0));
-        det.texto = descreverPagamento(resp);
-        if (resp.sobra > 0.01){ avisos.push('Linha ' + lin + ': sobraram ' + fmt(resp.sobra) + ' sem prestação onde aplicar'); det.estado = 'aviso'; }
+
+        // 2) parte do showroom (mesmas regras)
+        if (processarShowroom && nif && showInformado !== 0){
+          const rs = await proximaPrestacaoPorNif(nif, null, 'SHOWROOM');
+          if (rs.erro && !rs.vazio){ erros.push('Linha ' + lin + ' (showroom): ' + rs.erro); det.estado = 'erro'; det.texto = rs.erro; continue; }
+          if (!rs.erro){
+            let respS;
+            if (rs.opcoes.length > 1){
+              let somaS = 0;
+              for (const o of rs.opcoes) somaS += await devidoDoMesLinha(o.row);
+              respS = await aplicarPagamentoPessoa(nif, rs.opcoes, showInformado !== null ? showInformado : arred(somaS), dataPag, ' — showroom, importado de Excel');
+            } else {
+              respS = await aplicarPagamento(rs.opcoes[0].row, showInformado !== null ? showInformado : arred(await devidoDoMesLinha(rs.opcoes[0].row)), dataPag, ' — showroom, importado de Excel');
+            }
+            if (respS.erro){ erros.push('Linha ' + lin + ' (showroom): ' + respS.erro); det.estado = 'erro'; det.texto = respS.erro; continue; }
+            respS.rotulo = 'Showroom'; respostas.push(respS);
+          }
+        }
+        if (!respostas.length){ const m = erroEmprestimo || 'Não há prestações por pagar.'; erros.push('Linha ' + lin + ': ' + m); det.estado = 'erro'; det.texto = m; continue; }
+
+        const aplicados = respostas.flatMap(x => x.aplicados);
+        det.valor = arred(aplicados.reduce((s, a) => s + a.valor, 0));
+        det.texto = respostas.map(x => (respostas.length > 1 || x.rotulo === 'Showroom' ? x.rotulo + ': ' : '') + descreverPagamento(x)).join(' | ');
+        const sobra = respostas.reduce((s, x) => s + (x.sobra || 0), 0);
+        if (sobra > 0.01){ avisos.push('Linha ' + lin + ': sobraram ' + fmt(sobra) + ' sem prestação onde aplicar'); det.estado = 'aviso'; }
         processadas++;
-        pagamentosFeitos.push({ aplicados: resp.aplicados, dataPag });
+        pagamentosFeitos.push({ aplicados, dataPag });
 
         if (simular){
           // avisos de segurança: data no futuro, linha repetida no ficheiro, entrada igual já lançada no banco
           const avisosLinha = [];
           if (dataPag > hojeS) avisosLinha.push('data no futuro');
-          const chave = nif + '|' + dataPag + '|' + (informado === null ? 'auto' : informado) + '|' + (idPrest || empId || '');
+          const chave = nif + '|' + dataPag + '|' + (informado === null ? 'auto' : informado) + '|' + (showInformado === null ? 'auto' : showInformado) + '|' + (idPrest || empId || '');
           if (vistos.has(chave)){ avisosLinha.push('linha repetida no ficheiro'); det.dup = true; }
           vistos.add(chave);
-          for (const a of resp.aplicados){
+          for (const a of aplicados){
             const q = await sb.from('movimentos_banco').select('id').eq('tipo', 'ENTRADA').eq('data', dataPag)
               .ilike('descricao', 'Pagamento prestação nº ' + a.row.numero_prestacao + ' (empréstimo ' + a.row.emprestimo_id + ')%');
             if (!q.error && (q.data || []).length){ avisosLinha.push('já existe uma entrada do banco igual (prestação nº ' + a.row.numero_prestacao + ')'); det.dup = true; break; }
