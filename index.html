@@ -386,13 +386,14 @@
   .dash-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
   .dash-filtros{display:flex;align-items:center;gap:8px;}
   .dash-filtros select{height:36px;width:auto;}
-  .dash-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px;}
+  .dash-kpis{display:flex;flex-wrap:nowrap;gap:8px;margin-top:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+  .dash-kpis .kpi{flex:1 0 112px;min-width:112px;padding:9px 8px;}
+  .dash-kpis .k-label{font-size:10px;line-height:1.2;min-height:2.4em;}
   .dash-kpis .kpi{text-align:center;}
-  .dash-kpis .k-value{font-size:19px;}
-  .dash-kpis .k-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+  .dash-kpis .k-value{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .dash-kpis .k-sub{font-size:10px;line-height:1.25;color:var(--muted);margin-top:3px;}
   .dash-kpis .k-value.neg{color:var(--danger);} .dash-kpis .k-value.ok{color:var(--ok);} .dash-kpis .k-value.warn{color:var(--warn);}
   .dash-gap{margin-top:14px;}
-  @media (max-width:900px){ .dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
   .dash-leg{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:0 0 8px;}
   .dash-leg i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;}
   svg.dash-svg{width:100%;height:auto;display:block;}
@@ -875,7 +876,7 @@
     <div class="grid-eq">
       <section class="panel">
           <h2>Exportar prestações pendentes</h2>
-          <div class="empty">Gera um Excel com uma linha por pessoa (colunas ID, NIF, Nome, Valor): só a próxima prestação por pagar. Se essa prestação estiver parcial, o valor é o que falta dela mais a prestação seguinte. Se a pessoa tiver mais de um empréstimo ativo, os valores são somados numa só linha. Preenche Data Pagamento (e Valor Pago, se for diferente) e reimporta ao lado.</div>
+          <div class="empty">Gera um Excel com uma linha por pessoa (colunas ID, NIF, Nome, Valor, Showroom e Total): só a próxima prestação por pagar. O Valor é o dos empréstimos e o Showroom o das vendas de showroom, com as mesmas regras nos dois. Se essa prestação estiver parcial, o valor é o que falta dela mais a prestação seguinte. Se a pessoa tiver mais de um empréstimo ativo, os valores são somados numa só linha. Preenche Data Pagamento (e Valor Pago e Showroom Pago, se forem diferentes) e reimporta ao lado.</div>
           <button class="ghost" onclick="exportarPendentes()">Exportar para Excel</button>
         </section>
       <section class="panel gestao-only">
@@ -888,6 +889,7 @@
           Para pagar mais prestações da mesma pessoa, aumenta o Valor Pago ou usa mais linhas.
           Se a coluna <strong>ID Prestação</strong> estiver preenchida, esse ID tem prioridade.
           Só as linhas com Data Pagamento preenchida são processadas. Um Valor Pago menor do que o devido fica como pagamento parcial.
+          Com a coluna <strong>Showroom Pago</strong> (vem no ficheiro exportado) as vendas de showroom são pagas à parte: em branco paga o que está devido, 0 não paga, e outro valor paga esse valor. Com essa coluna, a pessoa é identificada pelo NIF.
         </div>
         <label for="pm-file">Ficheiro Excel (.xlsx)</label>
         <input id="pm-file" type="file" accept=".xlsx,.xls">
@@ -1146,6 +1148,12 @@
       <div class="dash-topo">
         <div class="empty" style="padding:0;">Visão geral da carteira de empréstimos. Os empréstimos anulados não entram nos valores.</div>
         <div class="dash-filtros">
+          <label for="dash-tipo" style="margin:0;">Ver</label>
+          <select id="dash-tipo" onchange="renderDashboard()">
+            <option value="EMPRESTIMO" selected>Empréstimos</option>
+            <option value="SHOWROOM">Showroom</option>
+            <option value="TODOS">Empréstimos e showroom</option>
+          </select>
           <label for="dash-periodo" style="margin:0;">Período</label>
           <select id="dash-periodo" onchange="renderDashboard()">
             <option value="6">Últimos 6 meses</option>
@@ -2064,10 +2072,11 @@ function textoValor(v){ return String(fmt(v)).replace(/[\u00a0\u202f]/g, ' ') + 
 // atraso: { n, valor, maisAntiga, dias } ou null | futuras: [{ data, valor, dias }] por data (só prestações ainda não vencidas)
 function situacaoCobranca(emps, porEmp){
   const hojeS = hoje();
-  let atraso = null; const porData = new Map();
+  let atraso = null; const porData = new Map(); let temE = false, temS = false;
   emps.forEach(emp => {
     const linhas = porEmp.get(emp.id) || [];
     if (['ANULADO', 'LIQUIDADO', 'PAGO'].includes(estadoFinalEmprestimo(emp, linhas))) return;
+    if (emp.tipo === 'SHOWROOM') temS = true; else temE = true;
     linhas.forEach(l => {
       const falta = faltaPrestacao(l);
       if (falta <= 0) return;
@@ -2080,20 +2089,20 @@ function situacaoCobranca(emps, porEmp){
   });
   if (atraso){ atraso.valor = arred(atraso.valor); atraso.dias = dias(atraso.maisAntiga, hojeS); }
   const futuras = [...porData.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([data, valor]) => ({ data, valor: arred(valor), dias: dias(hojeS, data) }));
-  return { atraso, futuras };
+  return { atraso, futuras, de: temE && temS ? 'dos seus contratos (empréstimo e showroom)' : temS ? 'da sua compra a prestações no showroom' : 'do seu empréstimo' };
 }
 function saudacao(){ const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 19 ? 'Boa tarde' : 'Boa noite'; }
 function mensagemLembrete(nome, sit){
   if (sit.atraso){
     const a = sit.atraso;
     return saudacao() + ', ' + nome + '. A ' + NOME_ENTIDADE + ' informa que tem ' + a.n + (a.n === 1 ? ' prestação' : ' prestações') +
-      ' do seu empréstimo em atraso, no valor total de ' + textoValor(a.valor) + ' (a mais antiga venceu em ' + dataPt(a.maisAntiga) + ', há ' + a.dias + (a.dias === 1 ? ' dia' : ' dias') +
+      ' ' + (sit.de || 'do seu empréstimo') + ' em atraso, no valor total de ' + textoValor(a.valor) + ' (a mais antiga venceu em ' + dataPt(a.maisAntiga) + ', há ' + a.dias + (a.dias === 1 ? ' dia' : ' dias') +
       '). Pedimos que regularize o pagamento logo que possível. Obrigado.';
   }
   const f = sit.futuras[0];
   if (!f) return null;
   const quando = f.dias <= 0 ? 'hoje (' + dataPt(f.data) + ')' : f.dias === 1 ? 'amanhã (' + dataPt(f.data) + ')' : 'em ' + f.dias + ' dias, a ' + dataPt(f.data);
-  return saudacao() + ', ' + nome + '. A ' + NOME_ENTIDADE + ' lembra que a prestação do seu empréstimo, no valor de ' + textoValor(f.valor) + ', vence ' + quando + '. Obrigado.';
+  return saudacao() + ', ' + nome + '. A ' + NOME_ENTIDADE + ' lembra que a prestação ' + (sit.de || 'do seu empréstimo') + ', no valor de ' + textoValor(f.valor) + ', vence ' + quando + '. Obrigado.';
 }
 function abrirWhatsApp(contacto, texto){
   const tel = telefoneWhatsApp(contacto);
@@ -3183,7 +3192,7 @@ async function carregarResumoMensal(){
   if (error){ log('Erro: ' + error.message, true); return; }
   const { data: prest, error: e2 } = await buscarTodasPrestacoes();
   if (e2){ log('Erro: ' + e2.message, true); return; }
-  dashCache = { emps: soEmprestimos(emps), prest: prest || [] };
+  dashCache = { emps: emps || [], prest: prest || [] };
   renderDashboard();
 }
 
@@ -3254,13 +3263,21 @@ function renderDashboard(){
   const porEmp = new Map();
   dashCache.prest.forEach(p => { if (!porEmp.has(p.emprestimo_id)) porEmp.set(p.emprestimo_id, []); porEmp.get(p.emprestimo_id).push(p); });
 
-  renderLembretes(dashCache.emps, porEmp);
+  // ---- tipo escolhido: empréstimos, showroom ou os dois ----
+  const tipoSel = document.getElementById('dash-tipo').value;
+  const empsF = dashCache.emps.filter(e => tipoSel === 'TODOS' || (tipoSel === 'SHOWROOM') === (e.tipo === 'SHOWROOM'));
+  const verbo = tipoSel === 'SHOWROOM' ? 'Vendido' : tipoSel === 'TODOS' ? 'Concedido' : 'Emprestado';
+  const nomeUn = tipoSel === 'SHOWROOM' ? 'venda' : tipoSel === 'TODOS' ? 'contrato' : 'empréstimo';
+  const nomePl = tipoSel === 'SHOWROOM' ? 'Vendas' : tipoSel === 'TODOS' ? 'Contratos' : 'Empréstimos';
+  const novosTxt = tipoSel === 'SHOWROOM' ? 'Novas vendas' : tipoSel === 'TODOS' ? 'Novos contratos' : 'Novos empréstimos';
+
+  renderLembretes(empsF, porEmp);
 
   // ---- período escolhido ----
   const sel = document.getElementById('dash-periodo').value;
   let inicio;
   if (sel === 'tudo'){
-    const todos = dashCache.emps.map(e => (e.data_inicio || '').slice(0, 7)).concat(dashCache.prest.map(p => (p.data_pagamento || '').slice(0, 7))).filter(Boolean).sort();
+    const todos = empsF.map(e => (e.data_inicio || '').slice(0, 7)).concat(dashCache.prest.map(p => (p.data_pagamento || '').slice(0, 7))).filter(Boolean).sort();
     inicio = todos.length ? todos[0] : mesAtual;
     if (inicio > mesAtual) inicio = mesAtual;
   } else if (sel === 'ano') inicio = mesAtual.slice(0, 4) + '-01';
@@ -3277,8 +3294,9 @@ function renderDashboard(){
   const aging = [{ rot: '1 a 30 dias', v: 0, n: 0 }, { rot: '31 a 60 dias', v: 0, n: 0 }, { rot: '61 a 90 dias', v: 0, n: 0 }, { rot: 'Mais de 90 dias', v: 0, n: 0 }];
   const futuro = new Map(); for (let i = 0; i < 6; i++) futuro.set(dashAddMes(mesAtual, i), 0);
   let totEmprestado = 0, nEmps = 0, nAnulados = 0, carteira = 0, saldoComAtraso = 0, atrasoValor = 0, atrasoPrest = 0, nEmpAtraso = 0, nAtivos = 0;
+  let contratado = 0, jurosContratados = 0, recebidoAcum = 0, jurosRecAcum = 0, venc30 = 0, nVenc30 = 0;   // acumulados desde sempre
 
-  dashCache.emps.forEach(emp => {
+  empsF.forEach(emp => {
     const linhas = porEmp.get(emp.id) || [];
     const estado = estadoFinalEmprestimo(emp, linhas);
     if (estado === 'ANULADO'){ nAnulados++; return; }
@@ -3292,13 +3310,19 @@ function renderDashboard(){
       const pago = valorPagoPrestacao(l), prest = Number(l.valor_prestacao), juro = Number(l.valor_juro || 0);
       const mp = (l.data_pagamento || '').slice(0, 7);
       if (pago > 0.004) acumular(mp, x => { x.recebido += pago; if (prest > 0) x.juros += pago * juro / prest; });
+      if (pago > 0.004){ recebidoAcum += pago; if (prest > 0) jurosRecAcum += pago * juro / prest; }
       if (liquidado && pago <= 0.004) return;                      // prestações que ficaram por pagar numa liquidação não contam
+      contratado += prest; jurosContratados += juro;
       const mv = (l.data_vencimento || '').slice(0, 7);
       if (l.data_vencimento <= hojeS) acumular(mv, x => { x.previsto += prest; });
       if (liquidado) return;
       const falta = faltaPrestacao(l);
       if (falta <= 0) return;
       saldo += falta;
+      if (estadoPrestacao(l) !== 'ATRASADO'){
+        const dd = Math.round((new Date(l.data_vencimento) - new Date(hojeS)) / msDia);
+        if (dd >= 0 && dd <= 30){ venc30 += falta; nVenc30++; }                  // a vencer nos próximos 30 dias
+      }
       if (estadoPrestacao(l) === 'ATRASADO'){
         const dias = Math.max(1, Math.floor((new Date(hojeS) - new Date(l.data_vencimento)) / msDia));
         atrasoEmp += falta; nAtrasoEmp++; maxDias = Math.max(maxDias, dias);
@@ -3341,15 +3365,17 @@ function renderDashboard(){
 
   // ---- cartões ----
   const kpis = [
-    { rot: 'Carteira em dívida', valor: fmt(carteira), sub: nAtivos + ' empréstimo(s) em curso · ' + nPessoasAtivas + ' pessoa(s)' },
-    { rot: 'Total emprestado', valor: fmt(totEmprestado), sub: nEmps + ' empréstimo(s)' + (nAnulados ? ' · ' + nAnulados + ' anulado(s) fora dos valores' : '') },
-    { rot: 'Emprestado no período', valor: fmt(emprestadoP), sub: varTxt(emprestadoP, emprestadoA), subCls: varCls(emprestadoP, emprestadoA) },
+    { rot: 'Saldo em dívida', valor: fmt(carteira), sub: nAtivos + ' ' + nomeUn + '(s) em curso · ' + nPessoasAtivas + ' pessoa(s)' },
+    { rot: verbo + ' (acumulado)', valor: fmt(totEmprestado), sub: nEmps + ' ' + nomeUn + '(s)' + (nAnulados ? ' · ' + nAnulados + ' anulado(s) fora' : '') },
+    { rot: 'Contratado (acumulado)', valor: fmt(contratado), sub: 'Capital ' + fmt(totEmprestado) + ' + juros ' + fmt(jurosContratados) },
+    { rot: 'Recebido (acumulado)', valor: fmt(recebidoAcum), sub: (contratado > 0 ? pct(recebidoAcum * 100 / contratado) + ' do contratado' : '—') + ' · juros ' + fmt(jurosRecAcum) },
+    { rot: verbo + ' no período', valor: fmt(emprestadoP), sub: varTxt(emprestadoP, emprestadoA), subCls: varCls(emprestadoP, emprestadoA) },
     { rot: 'Recebido no período', valor: fmt(recebidoP), sub: varTxt(recebidoP, recebidoA), subCls: varCls(recebidoP, recebidoA) },
-    { rot: 'Juros recebidos', valor: fmt(jurosP), sub: varTxt(jurosP, jurosA), subCls: varCls(jurosP, jurosA) },
+    { rot: 'Juros no período', valor: fmt(jurosP), sub: varTxt(jurosP, jurosA), subCls: varCls(jurosP, jurosA) },
     { rot: 'Cobrança', valor: cobranca == null ? '—' : pct(cobranca), cls: cobranca == null ? '' : cobranca >= 90 ? 'ok' : cobranca >= 70 ? 'warn' : 'neg',
       sub: 'Recebido ÷ previsto (' + fmt(previstoP) + ')' + (cobrancaA != null && temAnterior ? ' · ano anterior ' + pct(cobrancaA) : '') },
-    { rot: 'Valor em atraso', valor: fmt(atrasoValor), sub: atrasoPrest + ' prestação(ões) · ' + nEmpAtraso + ' empréstimo(s)', cls: atrasoValor > 0 ? 'neg' : '' },
-    { rot: 'Risco da carteira', valor: pct(par), sub: 'Saldo com atraso ÷ carteira', cls: par > 15 ? 'neg' : par > 5 ? 'warn' : 'ok' }
+    { rot: 'A vencer (30 dias)', valor: fmt(venc30), sub: nVenc30 + ' prestação(ões)' },
+    { rot: 'Valor em atraso', valor: fmt(atrasoValor), sub: atrasoPrest + ' prestação(ões) · ' + nEmpAtraso + ' ' + nomeUn + '(s) · risco ' + pct(par), cls: atrasoValor > 0 ? (par > 15 ? 'neg' : 'warn') : '' }
   ];
   document.getElementById('dash-kpis').innerHTML = kpis.map(k =>
     '<div class="kpi"><div class="k-label">' + dashEsc(k.rot) + '</div><div class="k-value ' + (k.cls || '') + '">' + dashEsc(k.valor) + '</div><div class="k-sub ' + (k.subCls ? 'sub-' + k.subCls : '') + '">' + dashEsc(k.sub) + '</div></div>').join('');
@@ -3358,12 +3384,12 @@ function renderDashboard(){
   const rot = meses.map(m => ({ l: dashRotuloMes(m), t: dashRotuloMes(m) }));
   const temDados = lista.some(x => x.emprestado || x.previsto || x.recebido);
   const COR_ANT = '#7c8798';
-  const serieGraf = [{ nome: 'Emprestado', cor: COR_DASH.azulClaro, valores: lista.map(x => x.emprestado) }, { nome: 'Recebido', cor: COR_DASH.azul, valores: lista.map(x => x.recebido) }];
+  const serieGraf = [{ nome: verbo, cor: COR_DASH.azulClaro, valores: lista.map(x => x.emprestado) }, { nome: 'Recebido', cor: COR_DASH.azul, valores: lista.map(x => x.recebido) }];
   const linhasGraf = [{ nome: 'Previsto', cor: COR_DASH.amarelo, valores: lista.map(x => x.previsto) }];
   const mostrarAnt = temAnterior && listaPrev.some(x => x.recebido > 0);
   if (mostrarAnt) linhasGraf.push({ nome: 'Recebido (ano anterior)', cor: COR_ANT, tracejado: true, valores: listaPrev.map(x => x.recebido) });
   document.getElementById('dash-mensal').innerHTML = temDados
-    ? dashLegenda([{ nome: 'Emprestado', cor: COR_DASH.azulClaro }, { nome: 'Recebido', cor: COR_DASH.azul }, { nome: 'Previsto (prestações vencidas até hoje)', cor: COR_DASH.amarelo }].concat(mostrarAnt ? [{ nome: 'Recebido no ano anterior (tracejado)', cor: COR_ANT }] : [])) +
+    ? dashLegenda([{ nome: verbo, cor: COR_DASH.azulClaro }, { nome: 'Recebido', cor: COR_DASH.azul }, { nome: 'Previsto (prestações vencidas até hoje)', cor: COR_DASH.amarelo }].concat(mostrarAnt ? [{ nome: 'Recebido no ano anterior (tracejado)', cor: COR_ANT }] : [])) +
       dashSvgBarras(rot, serieGraf, linhasGraf)
     : '<div class="empty">Ainda não há dados neste período.</div>';
 
@@ -3372,9 +3398,9 @@ function renderDashboard(){
   const totN = grupos.reduce((s, g) => s + g[1].n, 0);
   document.getElementById('dash-estados').innerHTML = totN
     ? '<div class="dash-pilha">' + grupos.filter(g => g[1].n).map(g => '<i style="width:' + (g[1].n * 100 / totN).toFixed(2) + '%;background:' + g[2] + '" title="' + g[0] + ': ' + g[1].n + '"></i>').join('') + '</div>' +
-      '<table><thead><tr><th>Estado</th><th class="num">Empréstimos</th><th class="num">%</th><th class="num">Em dívida</th></tr></thead><tbody>' +
+      '<table><thead><tr><th>Estado</th><th class="num">' + nomePl + '</th><th class="num">%</th><th class="num">Em dívida</th></tr></thead><tbody>' +
       grupos.map(g => '<tr><td><i style="display:inline-block;width:10px;height:10px;margin-right:8px;background:' + g[2] + '"></i>' + g[0] + '</td><td class="num">' + g[1].n + '</td><td class="num">' + pct(g[1].n * 100 / totN) + '</td><td class="num">' + fmt(g[1].saldo) + '</td></tr>').join('') + '</tbody></table>'
-    : '<div class="empty">Sem empréstimos.</div>';
+    : '<div class="empty">Sem ' + nomePl.toLowerCase() + '.</div>';
 
   // ---- atrasos por antiguidade ----
   const maxAging = Math.max(...aging.map(a => a.v));
@@ -3409,7 +3435,7 @@ function renderDashboard(){
   // ---- detalhe mensal ----
   const desc = [...meses].reverse();
   const varMes = (a, b) => (!temAnterior || b <= 0) ? '—' : (a >= b ? '+' : '−') + Math.abs((a - b) * 100 / b).toFixed(1).replace('.', ',') + '%';
-  const cabDet = ['Mês', 'Novos empréstimos', 'Emprestado', 'Previsto', 'Recebido', 'Cobrança', 'Recebido (ano anterior)', 'Variação', 'Juros recebidos'];
+  const cabDet = ['Mês', novosTxt, verbo, 'Previsto', 'Recebido', 'Cobrança', 'Recebido (ano anterior)', 'Variação', 'Juros recebidos'];
   const linhasDet = desc.map(m => { const x = M.get(m), pa = P.get(dashAddMes(m, -12));
     return [m, String(x.novos), fmt(x.emprestado), fmt(x.previsto), fmt(x.recebido), x.previsto > 0 ? pct(x.recebido * 100 / x.previsto) : '—', temAnterior ? fmt(pa.recebido) : '—', varMes(x.recebido, pa.recebido), fmt(x.juros)]; });
   const rodDet = ['Total', String(soma('novos')), fmt(emprestadoP), fmt(previstoP), fmt(recebidoP), cobranca == null ? '—' : pct(cobranca), temAnterior ? fmt(recebidoA) : '—', varMes(recebidoP, recebidoA), fmt(jurosP)];
@@ -3422,7 +3448,7 @@ function renderDashboard(){
   // ---- guarda o que está no ecrã para poder exportar em PDF ----
   const opt = document.getElementById('dash-periodo').selectedOptions[0].textContent;
   dashUltimo = {
-    periodoTxt: opt + ' (' + dashRotuloMes(meses[0]) + ' a ' + dashRotuloMes(meses[meses.length - 1]) + ')' + (temAnterior ? ' · comparação com o mesmo período do ano anterior' : ''),
+    periodoTxt: (tipoSel === 'SHOWROOM' ? 'Showroom' : tipoSel === 'TODOS' ? 'Empréstimos e showroom' : 'Empréstimos') + ' · ' + opt + ' (' + dashRotuloMes(meses[0]) + ' a ' + dashRotuloMes(meses[meses.length - 1]) + ')' + (temAnterior ? ' · comparação com o mesmo período do ano anterior' : ''),
     kpis, rotulos: meses.map(dashRotuloMes), series: serieGraf, linhas: linhasGraf, temDados,
     detalhe: { cab: cabDet, corpo: linhasDet, rodape: rodDet },
     atrasos: { cab: ['Pessoa', 'Prestações em atraso', 'Valor em atraso', 'Atraso mais antigo (dias)', 'Em dívida'], corpo: topAtraso.map(p => [p.nome, String(p.prestAtraso), fmt(p.atraso), String(p.maxDias), fmt(p.saldo)]) },
